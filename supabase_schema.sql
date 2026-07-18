@@ -60,6 +60,8 @@ CREATE TABLE IF NOT EXISTS alliances (
   created_at     TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Enable Row Level Security (optional for production)
--- ALTER TABLE users ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+-- Disable Row Level Security (Required for anonymous API client access)
+ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE projects DISABLE ROW LEVEL SECURITY;
+ALTER TABLE evaluations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE alliances DISABLE ROW LEVEL SECURITY;
