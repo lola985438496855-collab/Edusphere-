@@ -1,26 +1,118 @@
 require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
-const path = require('path');
+const cors    = require('cors');
+const path    = require('path');
+const fs      = require('fs');
 const { createClient } = require('@supabase/supabase-js');
 
-const app = express();
+const app  = express();
 const PORT = process.env.PORT || 3000;
 
 // ---- Supabase Client ----
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://obhoybumtaactmetyold.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_nl5PcpNr5gwPZ5M_nbO_Yw__qoB0r8I';
-
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 console.log('✅ Supabase client initialized:', SUPABASE_URL);
 
+// ========================================================
+//  PRE-SEEDED SECURE EVALUATOR ACCOUNTS (READ-ONLY STATIC)
+//  These are the only accounts that can have role=Evaluator.
+//  Cannot be registered externally through the public form.
+// ========================================================
+const SEEDED_EVALUATORS = [
+  { id: 'eval-static-001', name: 'Eng. Alaa Abdelrahman',   email: 'alaa@edusphere.edu',    password: 'alaa_eval_2026',    avatar: 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?auto=format&fit=crop&w=150&q=80' },
+  { id: 'eval-static-002', name: 'Eng. Tariq Ahmed',        email: 'tariq@edusphere.edu',   password: 'tariq_eval_2026',   avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=150&q=80' },
+  { id: 'eval-static-003', name: 'Eng. Mohamed Gamal',      email: 'mohamed@edusphere.edu', password: 'mohamed_eval_2026', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&q=80' },
+  { id: 'eval-static-004', name: 'Eng. Ahmed Mustafa',      email: 'ahmed@edusphere.edu',   password: 'ahmed_eval_2026',   avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80' },
+  { id: 'eval-static-005', name: 'Eng. Abdelaziz Mahmoud',  email: 'aziz@edusphere.edu',    password: 'aziz_eval_2026',    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80' },
+  { id: 'eval-static-006', name: 'Eng. Basant Reda',        email: 'basant@edusphere.edu',  password: 'basant_eval_2026',  avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80' },
+  { id: 'eval-static-007', name: 'Eng. Yara Hassan',        email: 'yara@edusphere.edu',    password: 'yara_eval_2026',    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80' },
+];
+
+// Seed evaluator accounts into Supabase on server startup (idempotent – skip if already exists)
+async function initializeSeededEvaluators() {
+  console.log('🔑 Checking pre-seeded evaluator accounts...');
+  for (const ev of SEEDED_EVALUATORS) {
+    const { data: existing } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', ev.id)
+      .maybeSingle();
+
+    if (!existing) {
+      const { error } = await supabase.from('users').insert([{
+        id:         ev.id,
+        name:       ev.name,
+        email:      ev.email.toLowerCase(),
+        password:   ev.password,
+        role:       'Evaluator',
+        avatar:     ev.avatar,
+        status:     'Available',
+        bio:        'Academic Reviewing Engineer – EduSphere Hub',
+        student_id: null,
+        major:      null,
+        skills:     []
+      }]);
+      if (error) {
+        console.warn(`⚠️  Could not seed evaluator ${ev.name}:`, error.message);
+      } else {
+        console.log(`   ✅ Seeded: ${ev.name} (${ev.email})`);
+      }
+    }
+  }
+  console.log('🔑 Evaluator seeding complete.');
+}
+
 // ---- Middleware ----
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));   // allow large Base64 avatar payloads
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// ==========================================
+//  BUG-6 EVALUATOR ROLE GATEWAY MIDDLEWARE
+//  Protects all /api/evaluations/* routes
+// ==========================================
+function evaluatorRoleGuard(req, res, next) {
+  const role = req.headers['x-user-role'];
+  if (role !== 'Evaluator' && role !== 'Admin') {
+    return res.status(403).json({
+      error: 'Forbidden: Access Denied. Only Evaluators and Admin can access grading routes.'
+    });
+  }
+  next();
+}
 
+// ==========================================
+//  BUG-5: LOCAL CACHE CO-WRITE HELPER
+//  Called after any Supabase mutation succeeds
+// ==========================================
+async function syncToLocalCache() {
+  try {
+    const [usersRes, projectsRes, evaluationsRes, alliancesRes] = await Promise.all([
+      supabase.from('users').select('*'),
+      supabase.from('projects').select('*'),
+      supabase.from('evaluations').select('*'),
+      supabase.from('alliances').select('*'),
+    ]);
+
+    const cache = {
+      users:       usersRes.data       || [],
+      projects:    projectsRes.data    || [],
+      evaluations: evaluationsRes.data || [],
+      alliances:   alliancesRes.data   || [],
+      lastSync:    new Date().toISOString()
+    };
+
+    const cacheDir = path.join(__dirname, 'data');
+    if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+    fs.writeFile(path.join(cacheDir, 'db.json'), JSON.stringify(cache, null, 2), (err) => {
+      if (err) console.warn('⚠️  Local cache write failed:', err.message);
+    });
+  } catch (err) {
+    console.warn('⚠️  syncToLocalCache error:', err.message);
+  }
+}
 
 // ==========================================
 //  API ROUTES
@@ -30,6 +122,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
+    }
 
     const { data: user, error } = await supabase
       .from('users')
@@ -64,44 +159,45 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // --- AUTH: Register ---
+// BUG-1 FIX: Role is ALWAYS forced to 'Student'. Evaluators are seeded accounts only.
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { name, email, password, wantsEvaluator, engineerCode, studentId, major } = req.body;
+    const { name, email, password, studentId, major } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
+    }
+
+    // Block registration using pre-seeded evaluator email domains
+    const emailLower = email.toLowerCase().trim();
+    if (SEEDED_EVALUATORS.some(ev => ev.email === emailLower)) {
+      return res.status(403).json({ error: 'This email address is a reserved institutional account.' });
+    }
 
     // Check duplicate email
     const { data: existing } = await supabase
       .from('users')
       .select('id')
-      .ilike('email', email.trim())
+      .ilike('email', emailLower)
       .maybeSingle();
 
     if (existing) {
       return res.status(400).json({ error: 'User with this email already registered.' });
     }
 
-    let assignedRole = 'Student';
-    if (wantsEvaluator) {
-      if (engineerCode && engineerCode.trim() === 'admin@123') {
-        assignedRole = 'Evaluator';
-      } else {
-        return res.status(403).json({ error: 'Unauthorized Access Code / كود التحقق غير صحيح' });
-      }
-    }
-
+    // HARDCODE role = 'Student' — no client-side role elevation allowed
     const newUser = {
-      id:       `usr-${Date.now()}`,
-      name:     name || email.split('@')[0],
-      email:    email.toLowerCase().trim(),
+      id:         `usr-${Date.now()}`,
+      name:       name || email.split('@')[0],
+      email:      emailLower,
       password,
-      role:     assignedRole,
-      avatar:   assignedRole === 'Evaluator'
-        ? 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&q=80'
-        : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
-      status:   'Available',
-      bio:      assignedRole === 'Evaluator' ? 'Academic Reviewing Engineer Node' : '',
-      student_id: assignedRole === 'Student' ? (studentId || `STD-${Math.floor(1000 + Math.random() * 9000)}`) : null,
-      major:      assignedRole === 'Student' ? (major || 'Computer Engineering') : null,
-      skills:     assignedRole === 'Student' ? ['HTML5', 'CSS3', 'JavaScript'] : []
+      role:       'Student',  // ← always forced
+      avatar:     'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+      status:     'Available',
+      bio:        '',
+      student_id: studentId || `STD-${Math.floor(1000 + Math.random() * 9000)}`,
+      major:      major || 'Computer Engineering',
+      skills:     ['HTML5', 'CSS3', 'JavaScript']
     };
 
     const { data: inserted, error: insertError } = await supabase
@@ -114,6 +210,9 @@ app.post('/api/auth/register', async (req, res) => {
       console.error('Register insert error:', insertError);
       return res.status(500).json({ error: 'Server registration error.' });
     }
+
+    // Async co-write local cache
+    syncToLocalCache();
 
     res.json({ success: true, user: {
       id:        inserted.id,
@@ -134,33 +233,47 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 // --- USERS: Update Profile ---
+// BUG-7 FIX: Verifies session x-user-id header matches target. No unverified body IDs.
+// BUG-3 FIX: Handles Base64 avatar field
 app.put('/api/users/update', async (req, res) => {
   try {
-    const userId = req.headers['x-user-id'];
-    if (!userId) return res.status(401).json({ error: 'Unauthorized session identifier.' });
+    const sessionUserId = req.headers['x-user-id'];
+    if (!sessionUserId) return res.status(401).json({ error: 'Unauthorized session identifier.' });
 
-    const { name, bio, status, skills } = req.body;
+    const { name, bio, status, skills, avatar, targetId } = req.body;
+
+    // BUG-7: IDOR Security – block if targetId in body differs from session header
+    if (targetId && targetId !== sessionUserId) {
+      return res.status(403).json({ error: 'Forbidden: Cannot modify records belonging to another user.' });
+    }
 
     const updates = {};
-    if (name)             updates.name   = name;
-    if (bio !== undefined) updates.bio   = bio;
-    if (status)           updates.status = status;
+    if (name !== undefined)   updates.name   = name;
+    if (bio  !== undefined)   updates.bio    = bio;
+    if (status)               updates.status = status;
     if (skills !== undefined) {
       updates.skills = Array.isArray(skills)
         ? skills
         : skills.split(',').map(s => s.trim()).filter(s => s.length > 0);
     }
+    // BUG-3: Accept Base64 avatar string from FileReader
+    if (avatar !== undefined && avatar !== null && avatar !== '') {
+      updates.avatar = avatar;
+    }
 
     const { data: updated, error } = await supabase
       .from('users')
       .update(updates)
-      .eq('id', userId)
+      .eq('id', sessionUserId)  // always use verified session id
       .select()
       .single();
 
     if (error || !updated) {
       return res.status(404).json({ error: 'User node not found.' });
     }
+
+    // Async co-write local cache
+    syncToLocalCache();
 
     res.json({
       success: true,
@@ -194,7 +307,6 @@ app.get('/api/projects', async (req, res) => {
 
     if (error) throw error;
 
-    // Map snake_case DB fields to camelCase for frontend compatibility
     const projects = data.map(p => ({
       id:                 p.id,
       title:              p.title,
@@ -207,7 +319,7 @@ app.get('/api/projects', async (req, res) => {
       liveDemoUrl:        p.live_demo_url,
       codebaseUrl:        p.codebase_url,
       imageUrl:           p.image_url,
-      videoUrl:           p.video_url
+      videoUrl:           p.video_url  // may be null — handled in frontend
     }));
 
     res.json(projects);
@@ -218,6 +330,7 @@ app.get('/api/projects', async (req, res) => {
 });
 
 // --- PROJECTS: Create ---
+// BUG-2 FIX: No hardcoded fallback video URL — stores NULL if empty
 app.post('/api/projects', async (req, res) => {
   try {
     const { title, description, teamMembers, techStack, liveDemoUrl, codebaseUrl, imageUrl, videoUrl } = req.body;
@@ -227,7 +340,7 @@ app.post('/api/projects', async (req, res) => {
       title,
       description,
       team_members:        teamMembers || [],
-      tech_stack:          techStack || [],
+      tech_stack:          techStack   || [],
       progress_percentage: 0,
       checklist: [
         { id: 1, text: "Establish layout design principles / تأسيس واجهة وتصميم النظام", checked: false },
@@ -236,15 +349,15 @@ app.post('/api/projects', async (req, res) => {
         { id: 4, text: "Conduct system testing operations / إجراء اختبار ومعايرة للنظام", checked: false }
       ],
       timeline: [
-        { phase: "Idea Conception", description: "Design conceptual flows and schematics", completed: true, date: new Date().toISOString().split('T')[0] },
-        { phase: "Database & Backend Design", description: "Establishing schemas and routing maps", completed: false, date: "" },
-        { phase: "Hardware & UI Integration", description: "Connecting features and layouts", completed: false, date: "" },
-        { phase: "Deployment & Calibration", description: "Publishing final platform links", completed: false, date: "" }
+        { phase: "Idea Conception",          description: "Design conceptual flows and schematics",   completed: true,  date: new Date().toISOString().split('T')[0] },
+        { phase: "Database & Backend Design", description: "Establishing schemas and routing maps",    completed: false, date: "" },
+        { phase: "Hardware & UI Integration", description: "Connecting features and layouts",          completed: false, date: "" },
+        { phase: "Deployment & Calibration",  description: "Publishing final platform links",          completed: false, date: "" }
       ],
-      live_demo_url:  liveDemoUrl  || '',
-      codebase_url:   codebaseUrl  || '',
-      image_url:      imageUrl     || 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80',
-      video_url:      videoUrl     || 'https://www.w3schools.com/html/mov_bbb.mp4'
+      live_demo_url:  liveDemoUrl || '',
+      codebase_url:   codebaseUrl || '',
+      image_url:      imageUrl    || 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80',
+      video_url:      (videoUrl && videoUrl.trim()) ? videoUrl.trim() : null  // BUG-2: NULL if empty
     };
 
     const { data: inserted, error } = await supabase
@@ -254,6 +367,9 @@ app.post('/api/projects', async (req, res) => {
       .single();
 
     if (error) throw error;
+
+    // Async co-write local cache
+    syncToLocalCache();
 
     res.json({ success: true, project: {
       id:                 inserted.id,
@@ -275,13 +391,78 @@ app.post('/api/projects', async (req, res) => {
   }
 });
 
+// --- PROJECTS: Update (Full/Partial) ---
+// BUG-9 FIX: Fetches existing JSONB fields and merges them to prevent data loss
+app.put('/api/projects/:id', async (req, res) => {
+  try {
+    const projectId = req.params.id;
+    const { title, description, teamMembers, techStack, liveDemoUrl, codebaseUrl, imageUrl, videoUrl, status, progressPercentage, checklist, timeline } = req.body;
+
+    // Fetch existing row first to preserve complex JSONB fields
+    const { data: existing, error: fetchError } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('id', projectId)
+      .single();
+
+    if (fetchError || !existing) {
+      return res.status(404).json({ error: 'Project not found.' });
+    }
+
+    // Merge only provided fields; retain existing JSONB arrays if not in request
+    const updates = {
+      title:               title              !== undefined ? title              : existing.title,
+      description:         description        !== undefined ? description        : existing.description,
+      team_members:        teamMembers        !== undefined ? teamMembers        : existing.team_members,
+      tech_stack:          techStack          !== undefined ? techStack          : existing.tech_stack,
+      live_demo_url:       liveDemoUrl        !== undefined ? liveDemoUrl        : existing.live_demo_url,
+      codebase_url:        codebaseUrl        !== undefined ? codebaseUrl        : existing.codebase_url,
+      image_url:           imageUrl           !== undefined ? imageUrl           : existing.image_url,
+      video_url:           videoUrl           !== undefined ? ((videoUrl && videoUrl.trim()) ? videoUrl.trim() : null) : existing.video_url,
+      progress_percentage: progressPercentage !== undefined ? progressPercentage : existing.progress_percentage,
+      // BUG-9: Retain existing checklist/timeline unless explicitly updated
+      checklist:           checklist          !== undefined ? checklist          : existing.checklist,
+      timeline:            timeline           !== undefined ? timeline           : existing.timeline,
+    };
+
+    const { data: updated, error: updateError } = await supabase
+      .from('projects')
+      .update(updates)
+      .eq('id', projectId)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+
+    // Async co-write local cache
+    syncToLocalCache();
+
+    res.json({ success: true, project: {
+      id:                 updated.id,
+      title:              updated.title,
+      description:        updated.description,
+      teamMembers:        updated.team_members,
+      techStack:          updated.tech_stack,
+      progressPercentage: updated.progress_percentage,
+      checklist:          updated.checklist,
+      timeline:           updated.timeline,
+      liveDemoUrl:        updated.live_demo_url,
+      codebaseUrl:        updated.codebase_url,
+      imageUrl:           updated.image_url,
+      videoUrl:           updated.video_url
+    }});
+  } catch (err) {
+    console.error('Update project error:', err);
+    res.status(500).json({ error: 'Failed to update project.' });
+  }
+});
+
 // --- PROJECTS: Update Checklist ---
 app.patch('/api/projects/:id/checklist', async (req, res) => {
   try {
     const { itemId, checked } = req.body;
     const projectId = req.params.id;
 
-    // Fetch current project
     const { data: project, error: fetchError } = await supabase
       .from('projects')
       .select('checklist, progress_percentage')
@@ -292,12 +473,10 @@ app.patch('/api/projects/:id/checklist', async (req, res) => {
       return res.status(404).json({ error: 'Project not found.' });
     }
 
-    // Update the specific checklist item
     const updatedChecklist = project.checklist.map(item =>
       item.id === parseInt(itemId) ? { ...item, checked } : item
     );
 
-    // Recalculate progress
     const checkedCount = updatedChecklist.filter(i => i.checked).length;
     const progressPercentage = Math.round((checkedCount / updatedChecklist.length) * 100);
 
@@ -307,6 +486,9 @@ app.patch('/api/projects/:id/checklist', async (req, res) => {
       .eq('id', projectId);
 
     if (updateError) throw updateError;
+
+    // Async co-write
+    syncToLocalCache();
 
     res.json({ success: true, progressPercentage });
   } catch (err) {
@@ -350,7 +532,6 @@ app.post('/api/alliance/request', async (req, res) => {
   try {
     const { senderId, recipientId, projectName } = req.body;
 
-    // Verify both users exist
     const { data: users, error: userError } = await supabase
       .from('users')
       .select('id, name')
@@ -376,11 +557,12 @@ app.post('/api/alliance/request', async (req, res) => {
 
     if (allianceError) throw allianceError;
 
-    // Mark recipient as Busy
     await supabase
       .from('users')
       .update({ status: 'Busy' })
       .eq('id', recipientId);
+
+    syncToLocalCache();
 
     res.json({ success: true, message: 'Alliance Request successfully dispatched.' });
   } catch (err) {
@@ -389,15 +571,79 @@ app.post('/api/alliance/request', async (req, res) => {
   }
 });
 
-// --- EVALUATIONS: Submit Grade ---
-app.post('/api/evaluations', async (req, res) => {
+// --- ALLIANCES: Get Incoming Requests (BUG-1 FIX) ---
+app.get('/api/alliance/incoming/:userId', async (req, res) => {
   try {
-    const userRole = req.headers['x-user-role'];
-    const userId   = req.headers['x-user-id'];
+    const { userId } = req.params;
 
-    if (userRole !== 'Evaluator' && userRole !== 'Engineer') {
-      return res.status(403).json({ error: 'Forbidden: Access Denied. Only Evaluators and reviewing Engineers can submit grades.' });
+    // Try with status filter first, fall back without it if column doesn't exist
+    let query = supabase
+      .from('alliances')
+      .select('*')
+      .eq('recipient_id', userId)
+      .order('created_at', { ascending: false });
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    // Filter pending client-side if status column exists, otherwise return all
+    const pending = data.filter(r => !r.status || r.status === 'pending');
+
+    res.json({ success: true, requests: pending });
+  } catch (err) {
+    console.error('Incoming alliances error:', err);
+    res.status(500).json({ error: 'Failed to fetch incoming alliance requests.' });
+  }
+});
+
+// --- ALLIANCES: Accept Request ---
+app.post('/api/alliance/accept', async (req, res) => {
+  try {
+    const { allianceId } = req.body;
+    // Try to update status, ignore error if column doesn't exist
+    const { error } = await supabase
+      .from('alliances')
+      .update({ status: 'accepted' })
+      .eq('id', allianceId);
+
+    if (error) console.warn('Accept status update (non-critical):', error.message);
+    syncToLocalCache();
+    res.json({ success: true, message: 'Alliance accepted.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to accept alliance.' });
+  }
+});
+
+// --- ALLIANCES: Decline Request ---
+app.post('/api/alliance/decline', async (req, res) => {
+  try {
+    const { allianceId, recipientId } = req.body;
+    // Try to update status, ignore error if column doesn't exist
+    const { error } = await supabase
+      .from('alliances')
+      .update({ status: 'declined' })
+      .eq('id', allianceId);
+
+    if (error) console.warn('Decline status update (non-critical):', error.message);
+
+    // Restore recipient's status to Available
+    if (recipientId) {
+      await supabase.from('users').update({ status: 'Available' }).eq('id', recipientId);
     }
+
+    syncToLocalCache();
+    res.json({ success: true, message: 'Alliance declined.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to decline alliance.' });
+  }
+});
+
+// --- EVALUATIONS: Submit Grade ---
+// BUG-6: Protected by evaluatorRoleGuard middleware
+app.post('/api/evaluations', evaluatorRoleGuard, async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
 
     const { projectId, grades, feedback } = req.body;
     if (!projectId || !grades || typeof feedback !== 'string') {
@@ -412,7 +658,6 @@ app.post('/api/evaluations', async (req, res) => {
       return res.status(400).json({ error: 'Grades must range exactly between 1 and 10.' });
     }
 
-    // Fetch evaluator name
     const { data: evaluator } = await supabase
       .from('users')
       .select('name')
@@ -431,16 +676,15 @@ app.post('/api/evaluations', async (req, res) => {
       feedback
     };
 
-    // Upsert: update if this evaluator already graded this project
     const { data: upserted, error: upsertError } = await supabase
       .from('evaluations')
-      .upsert([{ id: `eval-${Date.now()}`, ...record }], {
-        onConflict: 'project_id,evaluator_id'
-      })
+      .upsert([{ id: `eval-${Date.now()}`, ...record }], { onConflict: 'project_id,evaluator_id' })
       .select()
       .single();
 
     if (upsertError) throw upsertError;
+
+    syncToLocalCache();
 
     res.json({
       success: true,
@@ -454,7 +698,8 @@ app.post('/api/evaluations', async (req, res) => {
 });
 
 // --- EVALUATIONS: Get by Project ---
-app.get('/api/evaluations/:projectId', async (req, res) => {
+// BUG-6: Protected by evaluatorRoleGuard middleware
+app.get('/api/evaluations/:projectId', evaluatorRoleGuard, async (req, res) => {
   try {
     const { data: evals, error } = await supabase
       .from('evaluations')
@@ -469,7 +714,6 @@ app.get('/api/evaluations/:projectId', async (req, res) => {
       consensusAverage = parseFloat((total / evals.length).toFixed(2));
     }
 
-    // Map DB fields back to camelCase
     const evaluations = evals.map(e => ({
       id:            e.id,
       projectId:     e.project_id,
@@ -491,13 +735,17 @@ app.get('/api/evaluations/:projectId', async (req, res) => {
 //  START SERVER
 // ==========================================
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => {
+  app.listen(PORT, async () => {
     console.log(`===========================================================`);
     console.log(` EduSphere Server online → http://localhost:${PORT}`);
     console.log(` Database: Supabase PostgreSQL`);
     console.log(` Project : ${SUPABASE_URL}`);
     console.log(`===========================================================`);
+    await initializeSeededEvaluators();
   });
+} else {
+  // In production (Vercel), run seeding after module load
+  initializeSeededEvaluators().catch(console.warn);
 }
 
 module.exports = app;

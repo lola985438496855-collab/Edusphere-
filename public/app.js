@@ -166,11 +166,13 @@ const state = {
   currentUser: null,
   activeView: 'auth',
   authMode: 'login',
-  wantsEvaluator: false, 
+  wantsEvaluator: false,
   projects: [],
   students: [],
   selectedSkillsFilter: [],
-  selectedProjectIdForGrading: null
+  selectedProjectIdForGrading: null,
+  pendingAvatarBase64: null,       // BUG-3: holds FileReader result
+  alliancePollInterval: null       // BUG-1: polling timer reference
 };
 
 // SVG Progress ring configurations
@@ -188,7 +190,10 @@ document.addEventListener('DOMContentLoaded', () => {
   setupProjectRegistrationForm();
   setupProfileEditForm();
   setupUIInteractions();
-  
+  setupMatrixWipeOverlay();     // Section 3: Matrix wipe
+  setupTextScramblerOnButtons(); // Section 3: Text scrambler
+  loadLocalSettings();           // BUG-4: load stored settings
+
   // Set checklist template event delegator
   document.getElementById('dash-checklist').addEventListener('change', handleChecklistItemChange);
 });
@@ -272,14 +277,20 @@ function setupNavigation() {
       const view = link.getAttribute('data-view');
       if (!view) return;
       e.preventDefault();
-      
+
       // Block unauthenticated access with dynamic Egyptian toast warning
       if (!state.currentUser && view !== 'auth') {
         showToast("رايح فين يا هندسة؟ سجل دخول الأول الله يكرمك! 🛑", 'error');
         return;
       }
-      
-      switchView(view);
+
+      // Section 3: Matrix wipe transition
+      const useWipe = localStorage.getItem('edusphere_matrix_wipe') !== 'false';
+      if (useWipe && state.currentUser) {
+        runMatrixWipeTransition(() => switchView(view));
+      } else {
+        switchView(view);
+      }
     });
   });
 
@@ -475,6 +486,9 @@ function setupAuthForm() {
     } else {
       switchView('dashboard');
     }
+
+    // BUG-1: Start alliance notification polling (Students only)
+    startAlliancePolling();
   }
 
   // Logout trigger
@@ -483,6 +497,12 @@ function setupAuthForm() {
     state.currentUser = null;
     state.authMode = 'login';
     state.wantsEvaluator = false;
+
+    // BUG-1: Stop alliance polling on logout
+    if (state.alliancePollInterval) {
+      clearInterval(state.alliancePollInterval);
+      state.alliancePollInterval = null;
+    }
     
     document.querySelector('.nav-links').style.opacity = '0.3';
     document.querySelector('.nav-links').style.pointerEvents = 'none';
@@ -626,6 +646,33 @@ function setupProjectRegistrationForm() {
 
 // Settings Update frontend logic
 function setupProfileEditForm() {
+  // BUG-3: Avatar upload via FileReader → Base64
+  const avatarFileInput = document.getElementById('user-avatar-file');
+  const avatarTriggerBtn = document.getElementById('avatar-upload-trigger-btn');
+
+  if (avatarTriggerBtn) {
+    avatarTriggerBtn.addEventListener('click', () => {
+      avatarFileInput.click();
+    });
+  }
+
+  if (avatarFileInput) {
+    avatarFileInput.addEventListener('change', () => {
+      const file = avatarFileInput.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const base64 = ev.target.result;
+        state.pendingAvatarBase64 = base64;
+        // Preview in thumb and main avatar
+        const thumb = document.getElementById('avatar-preview-thumb');
+        if (thumb) thumb.src = base64;
+        showToast('صورتك جاهزة! اضغط Update Node عشان تتحفظ ✅', 'success');
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
   const form = document.getElementById('profile-edit-form');
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -638,6 +685,15 @@ function setupProfileEditForm() {
     const status = document.getElementById('edit-user-status').value;
     const skills = document.getElementById('edit-user-skills').value;
 
+    // BUG-4: Save local settings to LocalStorage (NOT sent to server)
+    saveLocalSettings();
+
+    const payload = { name, bio, status, skills };
+    // BUG-3: Attach Base64 avatar if user uploaded one
+    if (state.pendingAvatarBase64) {
+      payload.avatar = state.pendingAvatarBase64;
+    }
+
     try {
       const response = await fetch('/api/users/update', {
         method: 'PUT',
@@ -646,27 +702,24 @@ function setupProfileEditForm() {
           'x-user-id': state.currentUser.id,
           'x-user-role': state.currentUser.role
         },
-        body: JSON.stringify({ name, bio, status, skills })
+        body: JSON.stringify(payload)
       });
 
       const result = await response.json();
 
       if (response.ok && result.success) {
-        // Sync active user state
         state.currentUser = result.user;
-        
+        state.pendingAvatarBase64 = null; // clear pending avatar
+
         showToast("عاش.. بروفايلك بقى جاهز للسيط! ✨", 'success');
         showRandomMemeToast();
 
-        // Sync header displays
         document.getElementById('header-username').textContent = state.currentUser.name;
         document.getElementById('header-avatar').src = state.currentUser.avatar;
         document.getElementById('header-userrole').textContent = state.currentUser.role;
 
-        // Close modal
         document.getElementById('profile-modal').classList.remove('show');
 
-        // Reload active layout
         if (state.activeView === 'dashboard') {
           loadDashboardData();
         } else if (state.activeView === 'teamfinder') {
@@ -689,14 +742,17 @@ function openEditProfileModal() {
   const viewContainer = document.getElementById('modal-view-container');
   const editContainer = document.getElementById('modal-edit-container');
 
-  // Toggle visible blocks
   viewContainer.classList.add('hidden');
   editContainer.classList.remove('hidden');
 
-  // Pre-fill fields
   document.getElementById('edit-user-name').value = state.currentUser.name;
   document.getElementById('edit-user-bio').value = state.currentUser.bio || '';
   document.getElementById('edit-user-status').value = state.currentUser.status || 'Available';
+
+  // BUG-3: Pre-fill avatar preview thumb
+  const thumb = document.getElementById('avatar-preview-thumb');
+  if (thumb) thumb.src = state.currentUser.avatar || '';
+  state.pendingAvatarBase64 = null; // reset pending on open
 
   const skillsFieldGroup = document.getElementById('edit-user-skills-group');
   if (state.currentUser.role === 'Student') {
@@ -706,6 +762,9 @@ function openEditProfileModal() {
     skillsFieldGroup.classList.add('hidden');
     document.getElementById('edit-user-skills').value = '';
   }
+
+  // BUG-4: Load local settings into UI controls
+  loadLocalSettingsIntoUI();
 
   modal.classList.add('show');
 }
@@ -787,14 +846,16 @@ function setupDynamicDebugger() {
 
   if (scanBtn) {
     scanBtn.addEventListener('click', () => {
-      const code = inputArea.value.trim();
-      if (!code) {
-        showToast(state.currentLang === 'en' ? 'Submit code snippets for checking.' : 'أدخل الكود البرمجي أولاً لفحصه.', 'info');
-        return;
-      }
+      // BUG-8: Wrap entire scanner in try/catch to prevent layout freeze
+      try {
+        const code = inputArea.value.trim();
+        if (!code) {
+          showToast(state.currentLang === 'en' ? 'Submit code snippets for checking.' : 'أدخل الكود البرمجي أولاً لفحصه.', 'info');
+          return;
+        }
 
-      appendTerminalLine(code, 'user-line');
-      inputArea.value = '';
+        appendTerminalLine(code, 'user-line');
+        inputArea.value = '';
 
       // Egyptian Loader memes
       const loaderMsgs = [
@@ -956,6 +1017,11 @@ SELECT * FROM users WHERE email = ?;`;
         }, 800);
 
       }, 1000);
+      } catch (scanErr) {
+        // BUG-8: Catch any parser crash gracefully
+        console.warn('Debugger scanner error (caught):', scanErr);
+        appendTerminalLine('⚠️ DEBUGGER CRASH: Malformed input caused a scanner exception. Please check your code syntax.', 'diagnostic-line');
+      }
     });
   }
 }
@@ -1230,9 +1296,10 @@ function renderShowroomCards(projects) {
     card.innerHTML = `
       <div class="project-preview-container">
         <img src="${project.imageUrl}" alt="Preview" class="project-img">
+        ${project.videoUrl ? `
         <button class="play-overlay-btn" data-video="${project.videoUrl}">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        </button>
+        </button>` : ''}
       </div>
 
       <div class="project-card-body">
@@ -1260,11 +1327,19 @@ function renderShowroomCards(projects) {
       </div>
     `;
 
-    card.querySelector('.play-overlay-btn').addEventListener('click', (e) => {
-      const btn = e.currentTarget;
-      const videoUrl = btn.getAttribute('data-video');
-      openVideoLightbox(videoUrl);
-    });
+    // BUG-2: Only attach video click if videoUrl is valid
+    const playBtn = card.querySelector('.play-overlay-btn');
+    if (playBtn) {
+      playBtn.addEventListener('click', (e) => {
+        const btn = e.currentTarget;
+        const videoUrl = btn.getAttribute('data-video');
+        if (videoUrl && videoUrl !== 'null' && videoUrl !== 'undefined') {
+          openVideoLightbox(videoUrl);
+        } else {
+          showToast('لا يوجد فيديو تجريبي لهذا المشروع. 🎬', 'info');
+        }
+      });
+    }
 
     grid.appendChild(card);
   });
@@ -1796,3 +1871,263 @@ styleSheet.innerText = `
   }
 `;
 document.head.appendChild(styleSheet);
+
+// ==========================================
+//  BUG-1: ALLIANCE INCOMING POLLING (10s interval)
+// ==========================================
+function startAlliancePolling() {
+  if (!state.currentUser || state.currentUser.role !== 'Student') return;
+
+  // Clear any existing interval
+  if (state.alliancePollInterval) clearInterval(state.alliancePollInterval);
+
+  const pollFn = async () => {
+    try {
+      const res = await fetch(`/api/alliance/incoming/${state.currentUser.id}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const requests = data.requests || [];
+      if (requests.length > 0) {
+        injectAllianceNotifications(requests);
+      }
+    } catch (err) {
+      // silent fail — polling should never crash the UI
+    }
+  };
+
+  // Run immediately, then every 10s
+  pollFn();
+  state.alliancePollInterval = setInterval(pollFn, 10000);
+}
+
+function injectAllianceNotifications(requests) {
+  const notifList = document.getElementById('notif-list');
+  const notifBadge = document.getElementById('notif-badge');
+  if (!notifList) return;
+
+  // Remove existing alliance notification items to avoid duplicates
+  notifList.querySelectorAll('.alliance-notif-item').forEach(el => el.remove());
+
+  requests.forEach(req => {
+    const li = document.createElement('li');
+    li.className = 'alliance-notif-item';
+    li.setAttribute('data-alliance-id', req.id);
+    li.innerHTML = `
+      <span class="alliance-notif-sender">📡 ${req.sender_name}</span>
+      <span class="alliance-notif-project">
+        ${state.currentLang === 'en' ? 'Wants to team up on:' : 'يريد الانضمام إلى مشروع:'} <strong>${req.project_name || 'N/A'}</strong>
+      </span>
+      <div class="alliance-action-row">
+        <button class="alliance-accept-btn" data-id="${req.id}">
+          ✅ ${state.currentLang === 'en' ? 'Accept' : 'قبول'}
+        </button>
+        <button class="alliance-decline-btn" data-id="${req.id}">
+          ❌ ${state.currentLang === 'en' ? 'Decline' : 'رفض'}
+        </button>
+      </div>
+    `;
+
+    // Accept handler
+    li.querySelector('.alliance-accept-btn').addEventListener('click', async () => {
+      try {
+        await fetch('/api/alliance/accept', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ allianceId: req.id })
+        });
+        li.remove();
+        showToast(`✅ تم قبول طلب التحالف من ${req.sender_name}!`, 'success');
+      } catch (e) {
+        showToast('خطأ في قبول الطلب.', 'error');
+      }
+    });
+
+    // Decline handler
+    li.querySelector('.alliance-decline-btn').addEventListener('click', async () => {
+      try {
+        await fetch('/api/alliance/decline', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ allianceId: req.id, recipientId: state.currentUser.id })
+        });
+        li.remove();
+        showToast(`تم رفض طلب التحالف من ${req.sender_name}.`, 'info');
+      } catch (e) {
+        showToast('خطأ في رفض الطلب.', 'error');
+      }
+    });
+
+    notifList.insertBefore(li, notifList.firstChild);
+  });
+
+  // Show badge
+  if (requests.length > 0) {
+    notifBadge.textContent = requests.length;
+    notifBadge.style.display = 'flex';
+  }
+}
+
+// ==========================================
+//  BUG-4: LOCAL SETTINGS (LocalStorage only)
+// ==========================================
+const LS_KEYS = {
+  GLOW:       'edusphere_glow_intensity',
+  AUDIO:      'edusphere_audio_enabled',
+  ANIMATIONS: 'edusphere_animations_enabled',
+  MATRIX:     'edusphere_matrix_wipe'
+};
+
+function loadLocalSettings() {
+  const glow = localStorage.getItem(LS_KEYS.GLOW);
+  if (glow !== null) applyGlowIntensity(parseInt(glow));
+}
+
+function loadLocalSettingsIntoUI() {
+  const glowVal  = localStorage.getItem(LS_KEYS.GLOW)       ?? '60';
+  const audio    = localStorage.getItem(LS_KEYS.AUDIO)       !== 'false';
+  const anim     = localStorage.getItem(LS_KEYS.ANIMATIONS)  !== 'false';
+  const matrix   = localStorage.getItem(LS_KEYS.MATRIX)      !== 'false';
+
+  const glowEl  = document.getElementById('setting-glow-intensity');
+  const audioEl = document.getElementById('setting-audio-enabled');
+  const animEl  = document.getElementById('setting-animations-enabled');
+  const matrixEl= document.getElementById('setting-matrix-wipe');
+
+  if (glowEl)   glowEl.value   = glowVal;
+  if (audioEl)  audioEl.checked = audio;
+  if (animEl)   animEl.checked  = anim;
+  if (matrixEl) matrixEl.checked = matrix;
+}
+
+function saveLocalSettings() {
+  const glowEl   = document.getElementById('setting-glow-intensity');
+  const audioEl  = document.getElementById('setting-audio-enabled');
+  const animEl   = document.getElementById('setting-animations-enabled');
+  const matrixEl = document.getElementById('setting-matrix-wipe');
+
+  if (glowEl)   { localStorage.setItem(LS_KEYS.GLOW, glowEl.value);              applyGlowIntensity(parseInt(glowEl.value)); }
+  if (audioEl)  { localStorage.setItem(LS_KEYS.AUDIO, audioEl.checked); }
+  if (animEl)   { localStorage.setItem(LS_KEYS.ANIMATIONS, animEl.checked); }
+  if (matrixEl) { localStorage.setItem(LS_KEYS.MATRIX, matrixEl.checked); }
+
+  showToast('⚙️ الإعدادات المحلية تم حفظها في المتصفح!', 'success');
+}
+
+function applyGlowIntensity(val) {
+  // Map 0-100 to an opacity percentage for glow variables
+  const intensity = val / 100;
+  document.documentElement.style.setProperty('--accent-cyan-glow', `rgba(0, 240, 255, ${0.2 + intensity * 0.4})`);
+  document.documentElement.style.setProperty('--accent-green-glow', `rgba(57, 255, 20, ${0.2 + intensity * 0.4})`);
+  document.documentElement.style.setProperty('--accent-amber-glow', `rgba(255, 183, 0, ${0.2 + intensity * 0.4})`);
+}
+
+// ==========================================
+//  SECTION 3: MATRIX SCREEN WIPE TRANSITION
+// ==========================================
+function setupMatrixWipeOverlay() {
+  // Overlay is injected in index.html — just ensure canvas size is correct
+  const canvas = document.getElementById('matrix-wipe-canvas');
+  if (!canvas) return;
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+  window.addEventListener('resize', () => {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+  });
+}
+
+function runMatrixWipeTransition(callback) {
+  const overlay = document.getElementById('matrix-wipe-overlay');
+  const canvas  = document.getElementById('matrix-wipe-canvas');
+  if (!overlay || !canvas) { callback(); return; }
+
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width  = window.innerWidth;
+  const H = canvas.height = window.innerHeight;
+
+  const cols     = Math.floor(W / 18);
+  const drops    = Array(cols).fill(0);
+  const CHARS    = 'アイウエオカキクケコサシスセソタチツテトナニヌネノ01'.split('');
+  const DURATION = 750; // ms
+  let   startTime = null;
+  let   rafId;
+
+  overlay.classList.add('active');
+
+  function drawFrame(ts) {
+    if (!startTime) startTime = ts;
+    const elapsed = ts - startTime;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.18)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#00f0ff';
+    ctx.font = '14px monospace';
+
+    drops.forEach((y, i) => {
+      const char = CHARS[Math.floor(Math.random() * CHARS.length)];
+      ctx.fillText(char, i * 18, y * 18);
+      if (y * 18 > H && Math.random() > 0.975) drops[i] = 0;
+      else drops[i]++;
+    });
+
+    if (elapsed < DURATION) {
+      rafId = requestAnimationFrame(drawFrame);
+    } else {
+      cancelAnimationFrame(rafId);
+      overlay.classList.remove('active');
+      ctx.clearRect(0, 0, W, H);
+      callback();
+    }
+  }
+
+  rafId = requestAnimationFrame(drawFrame);
+}
+
+// ==========================================
+//  SECTION 3: TEXT SCRAMBLER ON ACTION BUTTONS
+// ==========================================
+const SCRAMBLE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%&!?';
+
+function scrambleText(element, originalText, duration = 500) {
+  let elapsed = 0;
+  const interval = 35;
+  const totalFrames = Math.ceil(duration / interval);
+  let frame = 0;
+
+  const timer = setInterval(() => {
+    frame++;
+    const progress = frame / totalFrames;
+    const resolvedChars = Math.floor(progress * originalText.length);
+
+    const scrambled = originalText.split('').map((ch, i) => {
+      if (i < resolvedChars || ch === ' ') return ch;
+      return SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)];
+    }).join('');
+
+    element.textContent = scrambled;
+
+    if (frame >= totalFrames) {
+      clearInterval(timer);
+      element.textContent = originalText;
+      element.classList.remove('btn-scramble-active');
+    }
+  }, interval);
+}
+
+function setupTextScramblerOnButtons() {
+  // Apply scramble effect to all primary/action buttons on hover
+  document.addEventListener('mouseover', (e) => {
+    const btn = e.target.closest('.primary-btn, .showroom-btn-demo, .lightning-btn, .alliance-btn');
+    if (!btn) return;
+    const textEl = btn.querySelector('.btn-text') || btn;
+    const original = textEl._originalText || textEl.textContent.trim();
+    textEl._originalText = original;
+    if (!btn._scramblerActive) {
+      btn._scramblerActive = true;
+      textEl.classList.add('btn-scramble-active');
+      scrambleText(textEl, original, 400);
+      setTimeout(() => { btn._scramblerActive = false; }, 500);
+    }
+  });
+}
+

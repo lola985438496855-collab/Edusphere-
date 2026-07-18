@@ -14,6 +14,14 @@
   <!-- Canvas overlay for evaluation confetti explosion -->
   <canvas id="confetti-canvas"></canvas>
 
+  <!-- Matrix Screen Wipe Overlay for navigation transitions -->
+  <div id="matrix-wipe-overlay">
+    <canvas id="matrix-wipe-canvas"></canvas>
+  </div>
+
+  <!-- Hidden file input for avatar upload (Bug 3) -->
+  <input type="file" id="user-avatar-file" accept="image/*" style="display:none;">
+
   <!-- Global Toast Notification Container -->
   <div id="toast-container" class="toast-container"></div>
 
@@ -530,6 +538,16 @@
               <p class="grading-subtitle" data-i18n="subtitle-settings">Update your node identity parameters</p>
             </div>
             <form id="profile-edit-form" class="evaluation-form">
+
+              <!-- BUG-3: Avatar Upload Trigger -->
+              <button type="button" class="avatar-upload-trigger" id="avatar-upload-trigger-btn">
+                <img id="avatar-preview-thumb" src="" alt="Avatar" class="avatar-preview-thumb">
+                <div>
+                  <div class="avatar-upload-label">📷 Change Avatar / تغيير الصورة الشخصية</div>
+                  <div class="avatar-upload-sublabel">Click to upload an image (JPG, PNG, WEBP)</div>
+                </div>
+              </button>
+
               <div class="input-group">
                 <input type="text" id="edit-user-name" required placeholder=" ">
                 <label for="edit-user-name" data-i18n="field-name">Full Name</label>
@@ -556,6 +574,40 @@
                 <span class="btn-text">تحديث البيانات / Update Node</span>
                 <span class="btn-loader"></span>
               </button>
+
+              <!-- BUG-4: Local Settings (stored in LocalStorage only — NOT synced to server) -->
+              <div class="local-settings-section">
+                <h4>⚙️ Local Settings / الإعدادات المحلية</h4>
+
+                <div class="setting-row">
+                  <span class="setting-label">🌊 Neon Glow Intensity / شدة التوهج</span>
+                  <input type="range" id="setting-glow-intensity" class="glow-range" min="0" max="100" value="60">
+                </div>
+
+                <div class="setting-row">
+                  <span class="setting-label">🔊 Debugger Audio / صوت المصحح</span>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="setting-audio-enabled">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+
+                <div class="setting-row">
+                  <span class="setting-label">✨ Holographic Animations / التأثيرات الثلاثية</span>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="setting-animations-enabled" checked>
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+
+                <div class="setting-row">
+                  <span class="setting-label">🌐 Matrix Wipe Transition / تأثير التحول</span>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="setting-matrix-wipe" checked>
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
             </form>
           </div>
 

@@ -2526,3 +2526,320 @@ body::after {
   100% { transform: translate(-2%, -3%) scale(0.97); }
 }
 
+
+/* ==========================================================================
+   SECTION 3: HOLOGRAPHIC ASSEMBLY ENTRANCE & PREMIUM ANIMATIONS
+   ========================================================================== */
+
+/* --- 1. Holographic Entrance: glass-panel staggered reveal --- */
+@keyframes holographicEntrance {
+  0% {
+    opacity: 0;
+    transform: translateY(35px) scale(0.97);
+    clip-path: inset(100% 0 0 0);
+    filter: blur(8px) brightness(0.3);
+  }
+  30% {
+    clip-path: inset(60% 0 0 0);
+    filter: blur(4px) brightness(0.6);
+  }
+  60% {
+    clip-path: inset(10% 0 0 0);
+    filter: blur(1px) brightness(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    clip-path: inset(0% 0 0 0);
+    filter: blur(0) brightness(1);
+  }
+}
+
+/* Laser scan-line flicker on entrance */
+@keyframes laserScanReveal {
+  0%   { background-position: 0 -100%; }
+  100% { background-position: 0 200%; }
+}
+
+/* Apply holographic entrance to glass panels with staggered delays */
+.dashboard-grid .glass-panel,
+.evaluator-grid .glass-panel,
+.matchmaking-grid .glass-panel,
+.showroom-grid .glass-panel {
+  animation: holographicEntrance 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.dashboard-grid .glass-panel:nth-child(1) { animation-delay: 0.05s; }
+.dashboard-grid .glass-panel:nth-child(2) { animation-delay: 0.15s; }
+.dashboard-grid .glass-panel:nth-child(3) { animation-delay: 0.25s; }
+
+.matchmaking-grid .glass-panel:nth-child(1) { animation-delay: 0.05s; }
+.matchmaking-grid .glass-panel:nth-child(2) { animation-delay: 0.12s; }
+.matchmaking-grid .glass-panel:nth-child(3) { animation-delay: 0.19s; }
+.matchmaking-grid .glass-panel:nth-child(4) { animation-delay: 0.26s; }
+.matchmaking-grid .glass-panel:nth-child(5) { animation-delay: 0.33s; }
+.matchmaking-grid .glass-panel:nth-child(6) { animation-delay: 0.40s; }
+
+.showroom-grid .glass-panel:nth-child(1) { animation-delay: 0.05s; }
+.showroom-grid .glass-panel:nth-child(2) { animation-delay: 0.18s; }
+.showroom-grid .glass-panel:nth-child(3) { animation-delay: 0.31s; }
+.showroom-grid .glass-panel:nth-child(4) { animation-delay: 0.44s; }
+
+/* Laser scan line overlay on glass panels (first reveal only) */
+.glass-panel::after {
+  content: '';
+  position: absolute;
+  top: -100%;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 240, 255, 0.9) 35%,
+    rgba(255, 255, 255, 1) 50%,
+    rgba(0, 240, 255, 0.9) 65%,
+    transparent 100%
+  );
+  box-shadow: 0 0 12px 4px rgba(0, 240, 255, 0.5);
+  pointer-events: none;
+  animation: laserScanReveal 0.7s ease-out both;
+  z-index: 2;
+}
+
+.glass-panel {
+  position: relative;
+  overflow: hidden;
+}
+
+/* --- 2. Matrix Screen Wipe Curtain overlay (injected via app.js) --- */
+#matrix-wipe-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99998;
+  pointer-events: none;
+  display: none;
+  overflow: hidden;
+}
+
+#matrix-wipe-overlay.active {
+  display: block;
+}
+
+#matrix-wipe-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* --- 3. Text Scrambler Button Style --- */
+.btn-scramble-active {
+  letter-spacing: 1px;
+  color: var(--accent-cyan) !important;
+  text-shadow: 0 0 8px var(--accent-cyan-glow), 0 0 15px rgba(0, 240, 255, 0.3);
+}
+
+/* --- 4. Alliance notification action badges --- */
+.alliance-notif-item {
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.alliance-notif-sender {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent-cyan);
+}
+
+.alliance-notif-project {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.alliance-action-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.3rem;
+}
+
+.alliance-accept-btn,
+.alliance-decline-btn {
+  flex: 1;
+  padding: 0.35rem 0.6rem;
+  border-radius: 5px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid;
+  transition: all 0.2s ease;
+  letter-spacing: 0.5px;
+}
+
+.alliance-accept-btn {
+  background: rgba(57, 255, 20, 0.1);
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+}
+
+.alliance-accept-btn:hover {
+  background: rgba(57, 255, 20, 0.22);
+  box-shadow: 0 0 10px var(--accent-green-glow);
+}
+
+.alliance-decline-btn {
+  background: rgba(255, 62, 62, 0.1);
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+
+.alliance-decline-btn:hover {
+  background: rgba(255, 62, 62, 0.22);
+  box-shadow: 0 0 10px var(--accent-red-glow);
+}
+
+/* --- 5. Avatar file upload trigger button (profile edit) --- */
+.avatar-upload-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.2rem;
+  cursor: pointer;
+  background: rgba(0, 240, 255, 0.06);
+  border: 1px dashed rgba(0, 240, 255, 0.3);
+  border-radius: 8px;
+  padding: 0.7rem 1rem;
+  transition: all 0.2s ease;
+  width: 100%;
+  text-align: left;
+}
+
+.avatar-upload-trigger:hover {
+  background: rgba(0, 240, 255, 0.12);
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.2);
+}
+
+.avatar-preview-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--accent-cyan);
+  box-shadow: 0 0 8px var(--accent-cyan-glow);
+  flex-shrink: 0;
+}
+
+.avatar-upload-label {
+  font-size: 0.82rem;
+  color: var(--accent-cyan);
+  font-weight: 600;
+}
+
+.avatar-upload-sublabel {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 0.1rem;
+}
+
+/* --- 6. Settings LocalStorage panel (inside edit modal) --- */
+.local-settings-section {
+  margin-top: 1.2rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.local-settings-section h4 {
+  font-size: 0.85rem;
+  color: var(--accent-amber);
+  font-weight: 700;
+  margin-bottom: 0.8rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-shadow: 0 0 6px rgba(255, 183, 0, 0.3);
+}
+
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.setting-label {
+  font-size: 0.83rem;
+  color: var(--text-secondary);
+}
+
+/* Toggle switch */
+.toggle-switch {
+  position: relative;
+  width: 38px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-tertiary);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: 0.3s;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.toggle-slider:before {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  left: 2px;
+  top: 2px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  transition: 0.3s;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: rgba(0, 240, 255, 0.2);
+  border-color: var(--accent-cyan);
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+  transform: translateX(18px);
+  background: var(--accent-cyan);
+  box-shadow: 0 0 6px var(--accent-cyan-glow);
+}
+
+/* Neon glow range slider */
+.glow-range {
+  width: 120px;
+  -webkit-appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-tertiary);
+  outline: none;
+  cursor: pointer;
+}
+
+.glow-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent-cyan);
+  box-shadow: 0 0 6px var(--accent-cyan-glow);
+  cursor: pointer;
+}
+
