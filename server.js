@@ -8,15 +8,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ---- Supabase Client ----
-const SUPABASE_URL = process.env.SUPABASE_URL || '';
-const SUPABASE_KEY = process.env.SUPABASE_KEY || '';
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://obhoybumtaactmetyold.supabase.co';
+const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_nl5PcpNr5gwPZ5M_nbO_Yw__qoB0r8I';
 
-let supabase = null;
-if (SUPABASE_URL && SUPABASE_KEY) {
-  supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-} else {
-  console.warn('⚠️  Warning: Missing SUPABASE_URL or SUPABASE_KEY. Supabase functions will fail.');
-}
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+console.log('✅ Supabase client initialized:', SUPABASE_URL);
 
 // ---- Middleware ----
 app.use(cors());
@@ -24,13 +20,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Database config validation middleware
-app.use('/api', (req, res, next) => {
-  if (!supabase) {
-    return res.status(500).json({ error: 'Supabase database is not configured. Please define SUPABASE_URL and SUPABASE_KEY in Vercel settings.' });
-  }
-  next();
-});
+
 
 // ==========================================
 //  API ROUTES
