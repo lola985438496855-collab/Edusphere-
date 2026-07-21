@@ -1321,12 +1321,11 @@ html[dir="rtl"] .prompt {
   gap: 2rem;
 }
 
-/* 3D Tilt Card performance enhancement will-change */
+/* 3D Tilt Card — performance enhancement */
 .card-tilt {
   will-change: transform, box-shadow;
-  /* SECTION 2 FIX: perspective:1000px with smooth transition */
   perspective: 1000px;
-  transition: transform 0.15s ease-out, box-shadow 0.2s ease, border-color 0.2s ease;
+  transition: transform 0.2s ease-out, box-shadow 0.2s ease-out, border-color 0.2s ease-out;
 }
 
 /* Individual Recruitment Card */
@@ -2482,15 +2481,14 @@ body::after {
   100% { text-shadow: 0 0 16px rgba(0, 240, 255, 0.8), 0 0 40px rgba(0, 240, 255, 0.4), 0 0 60px rgba(0, 240, 255, 0.15); }
 }
 
-/* 8. Card tilt transition */
+/* 8. Card tilt — smooth 3D perspective + spring-back */
 .card-tilt {
-  /* SECTION 2 FIX: Smooth perspective + transition */
   perspective: 1000px;
-  transition: transform 0.15s ease-out, box-shadow var(--transition-normal), border-color var(--transition-normal);
+  transition: transform 0.2s ease-out, box-shadow 0.2s ease-out, border-color 0.2s ease-out;
   will-change: transform;
 }
 
-/* SECTION 2 FIX: Ensure all interactive children inside tilt cards remain stable */
+/* Interactive children inside tilt cards stay stable and clickable */
 .card-tilt button,
 .card-tilt input,
 .card-tilt select,

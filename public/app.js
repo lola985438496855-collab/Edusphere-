@@ -1726,54 +1726,44 @@ function onCardMouseMove(e) {
   const xc = rect.width / 2;
   const yc = rect.height / 2;
 
-  // SECTION 2 FIX: If card has interactive elements, use gentle lift only
+  // Cards with interactive elements get softer 2-3deg tilt for button stability
   const hasInteractives = card.querySelector('button, input, select, textarea, form');
-  if (hasInteractives) {
-    if (tiltRAF) cancelAnimationFrame(tiltRAF);
-    tiltRAF = requestAnimationFrame(() => {
-      card.style.transform = 'translateY(-4px)';
-      card.style.boxShadow = '0 8px 25px var(--accent-cyan-glow)';
-      card.style.borderColor = 'var(--accent-cyan)';
-    });
-    return;
-  }
+  const maxAngle = hasInteractives ? 2.5 : 4.5;
+  const scaleFactor = hasInteractives ? 1.01 : 1.025;
 
-  let angleX = (yc - y) / 18;
-  let angleY = (x - xc) / 18;
+  // Compute raw tilt angles from mouse position
+  let angleX = (yc - y) / (rect.height / 2) * maxAngle;
+  let angleY = (x - xc) / (rect.width  / 2) * maxAngle;
 
-  // SECTION 2 FIX: Constrain angles to max 5deg (was 8deg)
-  angleX = Math.max(-5, Math.min(5, angleX));
-  angleY = Math.max(-5, Math.min(5, angleY));
+  // Clamp to max angle
+  angleX = Math.max(-maxAngle, Math.min(maxAngle, angleX));
+  angleY = Math.max(-maxAngle, Math.min(maxAngle, angleY));
 
-  // Coord-based 3D glow offsets (moving glow source dynamically)
-  const dx = (x - xc) / xc; // -1 to 1
-  const dy = (y - yc) / yc; // -1 to 1
-  const shadowX = -dx * 12;
-  const shadowY = -dy * 12;
+  // Dynamic glow offset follows mouse direction
+  const dx = (x - xc) / xc;
+  const dy = (y - yc) / yc;
+  const shadowX = -dx * 10;
+  const shadowY = -dy * 10;
 
-  if (tiltRAF) {
-    cancelAnimationFrame(tiltRAF);
-  }
+  if (tiltRAF) cancelAnimationFrame(tiltRAF);
 
   tiltRAF = requestAnimationFrame(() => {
-    card.style.transform = `perspective(1000px) rotateX(${angleX}deg) rotateY(${angleY}deg) scale3d(1.02, 1.02, 1.02)`;
-    card.style.boxShadow = `${shadowX}px ${shadowY}px 25px var(--accent-cyan-glow), 0 0 30px rgba(0, 0, 0, 0.5)`;
+    card.style.transform = `perspective(1000px) rotateX(${angleX}deg) rotateY(${angleY}deg) scale3d(${scaleFactor}, ${scaleFactor}, ${scaleFactor})`;
+    card.style.boxShadow = `${shadowX}px ${shadowY}px 22px var(--accent-cyan-glow), 0 0 28px rgba(0,0,0,0.45)`;
     card.style.borderColor = 'var(--accent-cyan)';
   });
 }
 
-// Restore default orientation on mouse leave
+// Restore default orientation on mouse leave — smooth spring-back
 function onCardMouseLeave(e) {
   const card = e.currentTarget;
-  
-  if (tiltRAF) {
-    cancelAnimationFrame(tiltRAF);
-  }
+
+  if (tiltRAF) cancelAnimationFrame(tiltRAF);
 
   tiltRAF = requestAnimationFrame(() => {
-    card.style.transform = '';
-    card.style.boxShadow = '';
-    card.style.borderColor = '';
+    card.style.transform    = 'perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1,1,1)';
+    card.style.boxShadow    = '';
+    card.style.borderColor  = '';
   });
 }
 
