@@ -339,8 +339,6 @@ function setupAuthForm() {
   const authFormTitle = document.getElementById('auth-form-title');
   const authToggleLink = document.getElementById('auth-toggle-link');
   const nameFieldGroup = document.getElementById('auth-name-group');
-  const codeFieldGroup = document.getElementById('auth-code-group');
-  const toggleEvaluatorSignupBtn = document.getElementById('toggle-evaluator-signup-btn');
 
   // Toggle Login/Register Mode
   authToggleLink.addEventListener('click', (e) => {
@@ -351,42 +349,19 @@ function setupAuthForm() {
       authFormTitle.textContent = state.currentLang === 'en' ? 'Access Terminal' : 'بوابة الدخول للمنظومة';
       document.getElementById('auth-btn-text').textContent = state.currentLang === 'en' ? 'Access Terminal' : 'تأكيد الهوية والدخول';
       nameFieldGroup.classList.add('hidden');
-      codeFieldGroup.classList.add('hidden');
       conditionalFields.classList.remove('show');
-      toggleEvaluatorSignupBtn.classList.add('hidden');
       state.wantsEvaluator = false;
     } else {
       authFormTitle.textContent = state.currentLang === 'en' ? 'Create New Node' : 'تسجيل حساب جديد';
       document.getElementById('auth-btn-text').textContent = state.currentLang === 'en' ? 'Register Account' : 'تسجيل الحساب';
       nameFieldGroup.classList.remove('hidden');
       document.getElementById('auth-name').setAttribute('required', 'true');
-      toggleEvaluatorSignupBtn.classList.remove('hidden');
-      toggleEvaluatorSignupBtn.textContent = state.currentLang === 'en' ? "Register as an Evaluator Engineer / التسجيل كمهندس مقيم" : "التسجيل كمهندس مقيم / Register as an Evaluator Engineer";
       
       // Default to Student signup
       state.wantsEvaluator = false;
       conditionalFields.classList.add('show');
-      codeFieldGroup.classList.add('hidden');
     }
     updateAuthToggleLinkText();
-  });
-
-  // Toggle between Student and Evaluator registration (Signup gate)
-  toggleEvaluatorSignupBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    state.wantsEvaluator = !state.wantsEvaluator;
-
-    if (state.wantsEvaluator) {
-      toggleEvaluatorSignupBtn.textContent = state.currentLang === 'en' ? "Register as a Student / التسجيل كطالب" : "التسجيل كطالب / Register as a Student";
-      codeFieldGroup.classList.remove('hidden');
-      conditionalFields.classList.remove('show');
-      document.getElementById('auth-code').setAttribute('required', 'true');
-    } else {
-      toggleEvaluatorSignupBtn.textContent = state.currentLang === 'en' ? "Register as an Evaluator Engineer / التسجيل كمهندس مقيم" : "التسجيل كمهندس مقيم / Register as an Evaluator Engineer";
-      codeFieldGroup.classList.add('hidden');
-      conditionalFields.classList.add('show');
-      document.getElementById('auth-code').removeAttribute('required');
-    }
   });
 
   const authForm = document.getElementById('auth-form');
@@ -399,7 +374,6 @@ function setupAuthForm() {
     const name = document.getElementById('auth-name').value;
     const email = document.getElementById('auth-email').value;
     const password = document.getElementById('auth-password').value;
-    const engineerCode = document.getElementById('auth-code').value;
     const studentId = document.getElementById('auth-student-id').value;
     const major = document.getElementById('auth-major').value;
 
@@ -427,8 +401,6 @@ function setupAuthForm() {
             name,
             email,
             password,
-            wantsEvaluator: state.wantsEvaluator,
-            engineerCode,
             studentId,
             major
           })
@@ -512,9 +484,7 @@ function setupAuthForm() {
     document.getElementById('header-avatar').src = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80';
     
     nameFieldGroup.classList.add('hidden');
-    codeFieldGroup.classList.add('hidden');
     conditionalFields.classList.remove('show');
-    toggleEvaluatorSignupBtn.classList.add('hidden');
     authFormTitle.textContent = state.currentLang === 'en' ? 'Access Terminal' : 'بوابة الدخول للمنظومة';
     document.getElementById('auth-btn-text').textContent = state.currentLang === 'en' ? 'Access Terminal' : 'تأكيد الهوية والدخول';
     
