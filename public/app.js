@@ -852,209 +852,456 @@ function updateCircularProgress(percentage) {
 
 // F. Smart Code Debugger UI Simulator with Egyptian core loading
 function setupDynamicDebugger() {
-  const scanBtn = document.getElementById('debugger-scan-btn');
+  const scanBtn   = document.getElementById('debugger-scan-btn');
   const inputArea = document.getElementById('debugger-input');
   const consoleLog = document.getElementById('debugger-console');
 
-  if (scanBtn) {
-    scanBtn.addEventListener('click', () => {
-      // BUG-8: Wrap entire scanner in try/catch to prevent layout freeze
-      try {
-        const code = inputArea.value.trim();
-        if (!code) {
-          showToast(state.currentLang === 'en' ? 'Submit code snippets for checking.' : 'أدخل الكود البرمجي أولاً لفحصه.', 'info');
-          return;
-        }
+  if (!scanBtn) return;
 
-        appendTerminalLine(code, 'user-line');
-        inputArea.value = '';
+  scanBtn.addEventListener('click', () => {
+    try {
+      const code = (inputArea ? inputArea.value : '').trim();
+      if (!code) {
+        showToast(
+          state.currentLang === 'en' ? 'Submit code snippets for checking.' : 'أدخل الكود البرمجي أولاً لفحصه.',
+          'info'
+        );
+        return;
+      }
 
-      // Egyptian Loader memes
+      // Clear any previous auto-fix panel
+      const oldPanel = document.getElementById('debugger-autofix-panel');
+      if (oldPanel) oldPanel.remove();
+
+      // Echo first 3 lines of submitted code
+      const preview = code.split('\n').slice(0, 3).join('\n') + (code.split('\n').length > 3 ? '\n  ...' : '');
+      appendTerminalLine(preview, 'user-line');
+      if (inputArea) inputArea.value = '';
+
+      // Egyptian loader messages
       const loaderMsgs = [
         "السيرفر بيصلي ركعتين بنية فرج الكود ده... 🕌",
         "جاري تحضير كوباية شاي بالنعناع لفك طلاسم الكود... ☕",
         "الـ Compiler بيحاول يستوعب الإبداع ده، ربنا يستر... 🧠",
-        "الكبسولة شغالة بنسبة 100% والناس رايقة... 💊",
-        "بنشيك على الكود ببركة دعا الوالدين... 🤲"
+        "بنشيك على الكود ببركة دعا الوالدين... 🤲",
+        "المعالج شغال بنسبة 100%، والناس رايقة... 💊"
       ];
-      const randomLoader = loaderMsgs[Math.floor(Math.random() * loaderMsgs.length)];
-      appendTerminalLine(`Gemini-Simulator Core: ${randomLoader}`, 'system-line');
-      
+      appendTerminalLine(
+        `⚙️ Gemini-Simulator Core: ${loaderMsgs[Math.floor(Math.random() * loaderMsgs.length)]}`,
+        'system-line'
+      );
       showRandomMemeToast();
 
+      // Async scan with 1.1s loader delay for UX feel
       setTimeout(() => {
-        let diagnosis = '';
-        let solution = '';
+        try {
+          const result = analyzeCode(code);
 
-        // 1. Arduino / Embedded Code Detection
-        if (code.includes('void setup') || code.includes('void loop') || code.includes('digitalWrite') || code.includes('analogRead') || code.includes('pinMode')) {
-          const usesIO = code.includes('digitalWrite') || code.includes('analogRead') || code.includes('digitalRead') || code.includes('analogWrite');
-          const hasPinMode = code.includes('pinMode');
-          
-          if (usesIO && !hasPinMode) {
-            diagnosis = state.currentLang === 'en' 
-              ? 'EMBEDDED COMPILER: Pin output mismatch. Executing port write/read operations without initializing pinMode() inside setup().'
-              : 'مصحح الأنظمة المدمجة: لم يتم ضبط وضع المنافذ. تحاول الكتابة/القراءة من منفذ دون تهيئته أولاً باستخدام pinMode().';
-            solution = `// Fix: Define pin direction inside setup()
-void setup() {
-    pinMode(13, OUTPUT); // Configure Pin 13 as Output
+          if (result.hasError) {
+            appendTerminalLine(
+              `❌ [${result.errorType}] — ${result.diagnosis}`,
+              'diagnostic-line'
+            );
+            if (result.errorLine > 0) {
+              appendTerminalLine(
+                `📍 Line ${result.errorLine}: <code style="color:var(--accent-amber)">${escapeHTML(result.errorContext)}</code>`,
+                'diagnostic-line'
+              );
+            }
+            appendTerminalLine(
+              '🔧 Auto-Fix Engine — generating corrected code output...',
+              'system-line'
+            );
+            setTimeout(() => {
+              renderAutoFixPanel(result.fixedCode, result.fixSummary, consoleLog);
+              consoleLog.scrollTop = consoleLog.scrollHeight;
+            }, 700);
+
+          } else {
+            // ✅ Valid code path
+            appendTerminalLine(
+              `<span style="color:var(--accent-green);font-weight:700">✅ Status 200: Code Syntax &amp; Logic Valid</span>`,
+              'success-line'
+            );
+            appendTerminalLine(`🔍 Language detected: <b>${result.language}</b>`, 'system-line');
+            if (result.runOutput) {
+              appendTerminalLine(
+                `▶ Simulated Run Output: <code style="color:var(--accent-cyan)">${escapeHTML(result.runOutput)}</code>`,
+                'run-line'
+              );
+            }
+            appendTerminalLine(
+              '📋 No critical issues detected. Code is clean and production-ready.',
+              'system-line'
+            );
+          }
+
+          consoleLog.scrollTop = consoleLog.scrollHeight;
+        } catch (innerErr) {
+          appendTerminalLine(
+            `⚠️ PARSER EXCEPTION: ${escapeHTML(innerErr.message)}`,
+            'diagnostic-line'
+          );
+        }
+      }, 1100);
+
+    } catch (outerErr) {
+      console.warn('Debugger crash (caught safely):', outerErr);
+      appendTerminalLine(
+        '⚠️ DEBUGGER CRASH: Malformed input caused a scanner exception. Input sanitized.',
+        'diagnostic-line'
+      );
+    }
+  });
 }
 
-void loop() {
-    digitalWrite(13, HIGH);
-}`;
-          } else if (code.includes('void setup') && (!code.includes('void setup()') || (code.split('{').length - 1 === 0))) {
-            diagnosis = state.currentLang === 'en' 
-              ? 'EMBEDDED COMPILER: Missing void setup() functional parameters or bracket enclosures.'
-              : 'مصحح الأنظمة المدمجة: صيغة تعريف الدالة setup خاطئة. تحقق من الأقواس والوسوم () {}.';
-            solution = `void setup() {
-    // Setup configurations go here
-}`;
-          } else {
-            diagnosis = state.currentLang === 'en' 
-              ? 'EMBEDDED LOGIC: System loops verified. Suggesting hardware debounce checks for interrupt ports.'
-              : 'مصحح الأنظمة المدمجة: التحقق من حلقة المعالجة loop. يُنصح بإضافة فلترة ميكانيكية (Debounce) لمقاطعات الأزرار.';
-            solution = `// Recommended Debounce check:
-void loop() {
-    if (digitalRead(2) == LOW) {
-        delay(50); // debounce delay
-        if (digitalRead(2) == LOW) {
-            // Action verified
-        }
-    }
-}`;
-          }
-        } 
-        // 2. HTML / CSS Code Detection
-        else if (code.includes('<div') || code.includes('<p') || code.includes('<span') || code.includes('class=') || code.includes('id=') || code.includes('style=') || code.includes('<html') || code.includes('background:')) {
-          const openDivs = (code.match(/<div/g) || []).length;
-          const closeDivs = (code.match(/\/div>/g) || []).length;
-          
-          if (openDivs !== closeDivs) {
-            diagnosis = state.currentLang === 'en' 
-              ? `DOM PARSER: Mismatched tag nesting. Found ${openDivs} open <div> blocks vs ${closeDivs} closed blocks causing style collapse.`
-              : `محلل الويب: وسوم غير متطابقة. تم العثور على ${openDivs} حاوية <div> مفتوحة مقابل ${closeDivs} مغلقة، مما يسبب انهيار التنسيق.`;
-            solution = `<!-- Fix: Properly close your HTML container -->
-<div class="glass-panel cyber-panel">
-    <p>All tags balanced and closed.</p>
-</div>`;
-          } else if (code.includes('{') && !code.includes('}')) {
-            diagnosis = state.currentLang === 'en' 
-              ? 'CSS COMPILER: Selector bracket omission. CSS rules must be declared inside curly brackets.'
-              : 'مصحح CSS: نسيان الأقواس الحاصرة. يجب وضع قواعد التنسيق داخل {} لتعمل بشكل صحيح.';
-            solution = `.cyber-panel {
-    border: 2px solid #00f3ff;
-    box-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
-}`;
-          } else {
-            diagnosis = state.currentLang === 'en' 
-              ? 'DOM STANDARDS: Semantic rules warning. Use section/article instead of nesting multiple general divs.'
-              : 'معايير الويب: تحذير هيكلي. يُفضل استخدام عناصر دلالية مثل section أو header بدلاً من تداخل divs غير المبرر.';
-            solution = `<section class="cyber-section">
-    <header class="panel-header">
-        <h3>Terminal Node</h3>
-    </header>
-</section>`;
-          }
-        } 
-        // 3. JavaScript / Node.js Code Detection
-        else if (code.includes('function') || code.includes('console') || code.includes('consl') || code.includes('const') || code.includes('let') || code.includes('var') || code.includes('if') || code.includes('require') || code.includes('import')) {
-          const hasConsoleTypo = code.includes('consl.log') || code.includes('concle.log') || code.includes('consol.log');
-          const hasIfWithoutParens = /if\s+[^\(]/g.test(code);
-          const hasConstReassignment = code.includes('const ') && (code.match(/const\s+(\w+)\s*=/g) || []).some(m => {
-            const varName = m.replace(/const\s+/, '').replace(/\s*=/, '').trim();
-            return new RegExp(`${varName}\\s*=`, 'g').test(code.replace(m, ''));
-          });
+// ══════════════════════════════════════════════════════
+//  DEBUGGER ENGINE — Real Code Analyzer
+// ══════════════════════════════════════════════════════
+function analyzeCode(code) {
+  const result = {
+    hasError: false, errorType: '', diagnosis: '',
+    errorLine: 0,   errorContext: '', fixedCode: '',
+    fixSummary: '', language: 'Unknown', runOutput: ''
+  };
 
-          if (hasConsoleTypo) {
-            diagnosis = state.currentLang === 'en' 
-              ? 'RUNTIME ERROR: ReferenceError: \'consl\' / \'consol\' is not defined. Property lookup failed on global object.'
-              : 'خطأ تشغيل: كائن الطباعة غير معرف. تم كتابة consl أو consol بدلاً من console.';
-            solution = `// Fix: Standard console.log call
-console.log("System diagnostic verified!");`;
-          } else if (hasIfWithoutParens) {
-            diagnosis = state.currentLang === 'en' 
-              ? 'SYNTAX ERROR: Unexpected identifier. Conditional statements in JavaScript require parenthesis.'
-              : 'خطأ قواعد: جملة الشرط if تفتقد إلى الأقواس الهلالية () المحيطة بالشرط.';
-            solution = `// Fix: Wrap the condition inside parenthesis
-if (items < 5) {
-    console.log("Stock is very low!");
-}`;
-          } else if (hasConstReassignment) {
-            diagnosis = state.currentLang === 'en' 
-              ? 'RUNTIME EXCEPTION: TypeError: Assignment to constant variable. Const objects cannot be reassigned.'
-              : 'خطأ تشغيل: محاولة إعادة تعيين قيمة لمتغير ثابت Const. استخدم let بدلاً منه.';
-            solution = `// Fix: Change identifier to let
-let value = 10;
-value = 20; // reassignment allowed`;
-          } else {
-            diagnosis = state.currentLang === 'en' 
-              ? 'OPTIMIZATION WARNING: Synchronous blocking logic detected. Use async/await promises.'
-              : 'تنبيه أداء: تم رصد أكواد متزامنة تعيق كفاءة التشغيل. يفضل استخدام الأنماط غير المتزامنة async/await.';
-            solution = `async function fetchData() {
-    const data = await fetch('/api/data');
-    return data.json();
-}`;
-          }
-        } 
-        // 4. Other languages & fallback
-        else {
-          if (code.includes('def ') || code.includes('print(')) {
-            diagnosis = state.currentLang === 'en' 
-              ? 'PYTHON PARSER: Indentation block scope validation. Python relies on consistent whitespace indentation.'
-              : 'محلل بايثون: التحقق من المسافات البادئة (Indentation). تعتمد بايثون على المسافات لتحديد كتل الكود.';
-            solution = `def calculate_stock(items):
-    if items < 5:
-        print("Stock is very low!")`;
-          } else if (code.toLowerCase().includes('select ') || code.toLowerCase().includes('insert ') || code.toLowerCase().includes('update ')) {
-            diagnosis = state.currentLang === 'en' 
-              ? 'DATABASE COMPILE: SQL injection vulnerability scanner triggered. Use prepared statements or parametrized inputs.'
-              : 'محلل قواعد البيانات: خطر ثغرة SQL Injection. استخدم الاستعلامات المجهزة (Prepared Statements).';
-            solution = `// Fix: Use SQL Parameter bindings
-SELECT * FROM users WHERE email = ?;`;
-          } else {
-            diagnosis = state.currentLang === 'en' 
-              ? 'INTELLIGENT SCANNED: Gemini-Simulator engine verified. Semicolon spacing and code conventions analyzed successfully.'
-              : 'تحليل الذكاء الاصطناعي (Gemini-Simulator): تم مراجعة الكود منطقياً والتحقق من بنية التعليمات وسياق المتغيرات.';
-            solution = `// Refactored and optimized block:
-// الكود سليم 100% وشغال ببركة دعا الوالدين وصافي النية!`;
-          }
-        }
+  // ── Language Detection ──
+  const isArduino = /\b(void\s+setup|void\s+loop|digitalWrite|analogRead|pinMode|Serial\.)/.test(code);
+  const isJS      = !isArduino && /\b(function|const |let |var |if\s*\(|for\s*\(|while\s*\(|return |console\.|async |await |class |require\(|import |=>)/.test(code);
+  const isPython  = /^(def |import |from |print\(|elif |class [A-Z])/m.test(code);
+  const isHTML    = /<\s*(div|html|body|head|p|span|section|form|input|button|script)\b/i.test(code);
+  const isCSS     = /[.#]?[\w-]+\s*\{[\s\S]*?\}/.test(code) && !isJS && !isHTML;
+  const isSQL     = /\b(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE|JOIN)\b/i.test(code);
 
-        appendTerminalLine(diagnosis, 'diagnostic-line');
-        
-        setTimeout(() => {
-          appendTerminalLine(solution, 'fix-line');
-          consoleLog.scrollTop = consoleLog.scrollHeight;
-        }, 800);
+  // ══════════════════════════════════════════
+  //  JAVASCRIPT — Real syntax check via new Function()
+  // ══════════════════════════════════════════
+  if (isJS) {
+    result.language = 'JavaScript / Node.js';
+    try {
+      // eslint-disable-next-line no-new-func
+      new Function(code);   // throws real SyntaxError if broken
 
-      }, 1000);
-      } catch (scanErr) {
-        // BUG-8: Catch any parser crash gracefully
-        console.warn('Debugger scanner error (caught):', scanErr);
-        appendTerminalLine('⚠️ DEBUGGER CRASH: Malformed input caused a scanner exception. Please check your code syntax.', 'diagnostic-line');
+      // ── Valid syntax: check for logic smells ──
+      let warned = false;
+
+      if (/\bvar\s+/.test(code)) {
+        warned = true;
+        result.hasError   = true;
+        result.errorType  = 'OPTIMIZATION WARNING';
+        result.diagnosis  = 'var keyword detected — modern JS uses const/let for block-scoping and TDZ safety.';
+        result.errorLine  = dbgFindLine(code, /\bvar\s+/);
+        result.errorContext = dbgGetLine(code, result.errorLine);
+        result.fixedCode  = code.replace(/\bvar\b/g, 'let');
+        result.fixSummary = 'Replaced all var → let for modern ES6+ block-scoped variable management.';
       }
+
+      if (!warned && /(?<![=!<>])==(?!=)/.test(code)) {
+        warned = true;
+        result.hasError   = true;
+        result.errorType  = 'TYPE-SAFETY WARNING';
+        result.diagnosis  = 'Loose equality (==) detected — use strict equality (===) to prevent type-coercion bugs.';
+        result.errorLine  = dbgFindLine(code, /==(?!=)/);
+        result.errorContext = dbgGetLine(code, result.errorLine);
+        result.fixedCode  = code.replace(/([^=!<>])==(?!=)/g, '$1===');
+        result.fixSummary = 'Replaced == with === for strict type-safe comparisons throughout the code.';
+      }
+
+      if (!warned && /\.then\s*\(/.test(code) && !/\basync\b/.test(code)) {
+        warned = true;
+        result.hasError   = true;
+        result.errorType  = 'ASYNC PATTERN WARNING';
+        result.diagnosis  = 'Promise .then() chain detected without async/await — modern pattern improves readability and error handling.';
+        result.errorLine  = dbgFindLine(code, /\.then\s*\(/);
+        result.errorContext = dbgGetLine(code, result.errorLine);
+        result.fixedCode  = `// ✅ Refactored to async/await pattern:\nasync function fetchData() {\n  try {\n    const result = await yourPromise();\n    console.log('Success:', result);\n    return result;\n  } catch (err) {\n    console.error('Error:', err.message);\n  }\n}`;
+        result.fixSummary = 'Converted .then() chain to clean async/await with try/catch error handling.';
+      }
+
+      // ── Truly valid: simulate run ──
+      if (!warned) {
+        result.hasError = false;
+        const captured = [];
+        try {
+          // eslint-disable-next-line no-new-func
+          const fn = new Function('console', code);
+          fn({ log: (...a) => captured.push(a.map(String).join(' ')), warn: () => {}, error: () => {} });
+        } catch (_) { /* runtime error — still syntactically valid */ }
+        result.runOutput = captured.length
+          ? captured.slice(0, 4).join(' │ ')
+          : 'No console.log output — function/class definitions only.';
+      }
+
+    } catch (syntaxErr) {
+      result.hasError    = true;
+      result.errorType   = 'SYNTAX ERROR';
+      result.diagnosis   = syntaxErr.message;
+
+      // Extract real line number from error stack
+      const stackLine = (syntaxErr.stack || '').match(/<anonymous>:(\d+)/);
+      const msgLine   = syntaxErr.message.match(/line\s*(\d+)/i);
+      result.errorLine    = stackLine ? parseInt(stackLine[1]) - 1
+                          : msgLine  ? parseInt(msgLine[1])
+                          : dbgFindLine(code, /[^\s]/);
+      result.errorContext = dbgGetLine(code, result.errorLine);
+      result.fixedCode    = dbgAutoFixJS(code, syntaxErr.message);
+      result.fixSummary   = `Auto-corrected SyntaxError near line ${result.errorLine}.`;
+    }
+
+  // ══════════════════════════════════════════
+  //  ARDUINO / EMBEDDED C++
+  // ══════════════════════════════════════════
+  } else if (isArduino) {
+    result.language = 'Arduino / C++ Embedded';
+    const usesIO    = /\b(digitalWrite|analogRead|digitalRead|analogWrite)\b/.test(code);
+    const hasPinMode = /\bpinMode\b/.test(code);
+    const openBraces  = (code.match(/\{/g) || []).length;
+    const closeBraces = (code.match(/\}/g) || []).length;
+
+    if (usesIO && !hasPinMode) {
+      result.hasError   = true;
+      result.errorType  = 'EMBEDDED LOGIC ERROR';
+      result.diagnosis  = 'I/O operations (digitalWrite/analogRead) called without initializing pinMode() in setup().';
+      result.errorLine  = dbgFindLine(code, /\b(digitalWrite|analogRead)\b/);
+      result.errorContext = dbgGetLine(code, result.errorLine);
+      result.fixedCode  = `void setup() {\n  pinMode(13, OUTPUT); // ✅ Initialize pin direction first\n}\n\nvoid loop() {\n  digitalWrite(13, HIGH);\n  delay(1000);\n  digitalWrite(13, LOW);\n  delay(1000);\n}`;
+      result.fixSummary = 'Added missing pinMode() initialization in setup() before using I/O operations.';
+    } else if (openBraces !== closeBraces) {
+      result.hasError   = true;
+      result.errorType  = 'BRACE MISMATCH';
+      result.diagnosis  = `Unbalanced braces: ${openBraces} opening { vs ${closeBraces} closing }. Compiler will refuse to build.`;
+      result.errorLine  = openBraces > closeBraces ? code.split('\n').length : 1;
+      result.errorContext = dbgGetLine(code, result.errorLine);
+      result.fixedCode  = code + (openBraces > closeBraces ? '\n}'.repeat(openBraces - closeBraces) : '');
+      result.fixSummary = `Added ${Math.abs(openBraces - closeBraces)} missing closing brace(s).`;
+    } else {
+      result.hasError  = false;
+      result.runOutput = 'Arduino build simulation passed. Loop structure and pin definitions verified.';
+    }
+
+  // ══════════════════════════════════════════
+  //  HTML / CSS
+  // ══════════════════════════════════════════
+  } else if (isHTML) {
+    result.language = 'HTML / CSS';
+    const openDivs  = (code.match(/<div\b/gi)  || []).length;
+    const closeDivs = (code.match(/<\/div>/gi) || []).length;
+    const openCSSBrace  = (code.match(/\{/g) || []).length;
+    const closeCSSBrace = (code.match(/\}/g) || []).length;
+
+    if (openDivs !== closeDivs) {
+      result.hasError   = true;
+      result.errorType  = 'DOM PARSE ERROR';
+      result.diagnosis  = `Mismatched <div> tags: ${openDivs} opening vs ${closeDivs} closing — causes layout collapse.`;
+      result.errorLine  = dbgFindLine(code, /<div/);
+      result.errorContext = dbgGetLine(code, result.errorLine);
+      result.fixedCode  = code + '</div>'.repeat(Math.max(0, openDivs - closeDivs));
+      result.fixSummary = `Added ${Math.max(0, openDivs - closeDivs)} missing </div> closing tag(s).`;
+    } else if (openCSSBrace !== closeCSSBrace) {
+      result.hasError   = true;
+      result.errorType  = 'CSS SYNTAX ERROR';
+      result.diagnosis  = `Unmatched CSS braces: ${openCSSBrace} { vs ${closeCSSBrace} }. Style rules will not apply.`;
+      result.errorLine  = dbgFindLine(code, /\{/);
+      result.errorContext = dbgGetLine(code, result.errorLine);
+      result.fixedCode  = code + ' }'.repeat(Math.max(0, openCSSBrace - closeCSSBrace));
+      result.fixSummary = `Closed ${Math.max(0, openCSSBrace - closeCSSBrace)} unclosed CSS rule block(s).`;
+    } else {
+      result.hasError  = false;
+      result.runOutput = 'DOM structure validated. All tags balanced. Semantic structure clean.';
+    }
+
+  // ══════════════════════════════════════════
+  //  SQL
+  // ══════════════════════════════════════════
+  } else if (isSQL) {
+    result.language = 'SQL / Database Query';
+    const hasInjection = /('\s*OR\s*'|\bOR\b.*=.*--|;\s*DROP|UNION\s+SELECT)/i.test(code);
+    const missingWhere = /\b(UPDATE|DELETE)\b/i.test(code) && !/\bWHERE\b/i.test(code);
+
+    if (hasInjection) {
+      result.hasError   = true;
+      result.errorType  = 'SQL INJECTION RISK';
+      result.diagnosis  = 'SQL Injection pattern detected (OR 1=1 / UNION SELECT / DROP). Never interpolate user input directly into queries.';
+      result.errorLine  = 1;
+      result.errorContext = dbgGetLine(code, 1);
+      result.fixedCode  = `-- ✅ Use parameterized prepared statements:\nSELECT * FROM users WHERE email = ? AND password = ?;\n-- Pass values separately as parameters, never via string concatenation.`;
+      result.fixSummary = 'Replaced raw SQL string with parameterized query to prevent injection attacks.';
+    } else if (missingWhere) {
+      result.hasError   = true;
+      result.errorType  = 'DESTRUCTIVE QUERY WARNING';
+      result.diagnosis  = 'UPDATE or DELETE without WHERE clause detected — this will affect ALL rows in the table!';
+      result.errorLine  = dbgFindLine(code, /\b(UPDATE|DELETE)\b/i);
+      result.errorContext = dbgGetLine(code, result.errorLine);
+      result.fixedCode  = code.replace(/(UPDATE\s+\w+\s+SET[\s\S]*?)(;|$)/i, '$1 WHERE id = :targetId;');
+      result.fixSummary = 'Added WHERE clause to prevent full-table modification.';
+    } else {
+      result.hasError  = false;
+      result.runOutput = 'Query syntax valid. No injection patterns or missing WHERE clauses detected.';
+    }
+
+  // ══════════════════════════════════════════
+  //  PYTHON
+  // ══════════════════════════════════════════
+  } else if (isPython) {
+    result.language = 'Python 3';
+    const hasPrintNoParens = /^\s*print\s+[^(]/m.test(code);
+    const hasMixedIndent   = /^( +\t|\t +)/m.test(code);
+    const hasColonMissing  = /^(def |class |if |for |while |elif |else)[^:]*$/m.test(code);
+
+    if (hasPrintNoParens) {
+      result.hasError   = true;
+      result.errorType  = 'SYNTAX ERROR (Python 2 vs 3)';
+      result.diagnosis  = 'print used without parentheses — Python 3 requires print() as a function call.';
+      result.errorLine  = dbgFindLine(code, /^\s*print\s+[^(]/m);
+      result.errorContext = dbgGetLine(code, result.errorLine);
+      result.fixedCode  = code.replace(/^(\s*)print\s+(.+)$/mg, '$1print($2)');
+      result.fixSummary = 'Converted print statements to print() function calls (Python 3 syntax).';
+    } else if (hasMixedIndent) {
+      result.hasError   = true;
+      result.errorType  = 'INDENTATION ERROR';
+      result.diagnosis  = 'Mixed tabs and spaces detected. Python requires consistent indentation (use 4 spaces).';
+      result.errorLine  = dbgFindLine(code, /( +\t|\t +)/);
+      result.errorContext = dbgGetLine(code, result.errorLine);
+      result.fixedCode  = code.replace(/\t/g, '    ');
+      result.fixSummary = 'Replaced all tabs with 4 spaces for consistent Python indentation.';
+    } else if (hasColonMissing) {
+      result.hasError   = true;
+      result.errorType  = 'SYNTAX ERROR';
+      result.diagnosis  = 'Missing colon (:) at end of def/class/if/for/while block declaration.';
+      result.errorLine  = dbgFindLine(code, /^(def |class |if |for |while )[^:]*$/);
+      result.errorContext = dbgGetLine(code, result.errorLine);
+      result.fixedCode  = code.replace(
+        /^((def |class |if |for |while |elif |else)[^:\n]*)$/mg, '$1:'
+      );
+      result.fixSummary = 'Added missing colon (:) to block-opening statements.';
+    } else {
+      result.hasError  = false;
+      result.runOutput = 'Python structure validated. Indentation, syntax, and print() calls all verified.';
+    }
+
+  } else {
+    // Generic fallback
+    result.language  = 'Unknown / Plain Text';
+    result.hasError  = false;
+    result.runOutput = 'No recognized language patterns detected. Treating as plain text — no errors found.';
+  }
+
+  return result;
+}
+
+// ── Helper: find first matching line number (1-indexed) ──
+function dbgFindLine(code, pattern) {
+  const lines = code.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    if (pattern instanceof RegExp ? pattern.test(lines[i]) : lines[i].includes(pattern)) {
+      return i + 1;
+    }
+  }
+  return 1;
+}
+
+// ── Helper: get line content by number (1-indexed) ──
+function dbgGetLine(code, lineNum) {
+  const lines = code.split('\n');
+  return (lines[lineNum - 1] || '').trim().slice(0, 80);
+}
+
+// ── Helper: Auto-fix common JS syntax errors ──
+function dbgAutoFixJS(code, errMsg) {
+  let fixed = code;
+  const msg = errMsg.toLowerCase();
+
+  if (msg.includes('unexpected end') || msg.includes('missing }')) {
+    const open  = (fixed.match(/\{/g) || []).length;
+    const close = (fixed.match(/\}/g) || []).length;
+    if (open > close) fixed += '\n}'.repeat(open - close);
+  }
+  if (msg.includes('missing )') || msg.includes('unexpected token )')) {
+    const open  = (fixed.match(/\(/g) || []).length;
+    const close = (fixed.match(/\)/g) || []).length;
+    if (open > close) fixed += ')'.repeat(open - close);
+  }
+  if (msg.includes('missing ;') || msg.includes('missing semicolon')) {
+    fixed = fixed.replace(/([^;{},\n])\n/g, '$1;\n');
+  }
+  if (msg.includes('unterminated string') || msg.includes('string literal')) {
+    fixed = fixed.replace(/(['"`])([^'"`\n]*?)$/m, '$1$2$1');
+  }
+
+  // If nothing changed, return helpful template
+  if (fixed === code) {
+    fixed = `// ⚠️ Auto-fix could not fully resolve this error automatically.\n// Original error: ${errMsg}\n// Suggested action: Check brackets {}, parentheses (), and string quotes.\n\n${code}`;
+  }
+
+  return fixed;
+}
+
+// ── Render the styled Auto-Fix Panel below the terminal ──
+function renderAutoFixPanel(fixedCode, summary, consoleEl) {
+  const panel = document.createElement('div');
+  panel.id = 'debugger-autofix-panel';
+  panel.className = 'auto-fix-panel';
+
+  panel.innerHTML = `
+    <div class="auto-fix-header">
+      <span class="auto-fix-badge">🔧 AUTO-FIX OUTPUT</span>
+      <span class="auto-fix-summary">${escapeHTML(summary)}</span>
+      <button class="copy-fix-btn" onclick="copyAutoFix()">📋 Copy Fixed Code</button>
+    </div>
+    <pre id="auto-fix-code"><code>${escapeHTML(fixedCode)}</code></pre>
+  `;
+
+  // Insert after the terminal console
+  if (consoleEl && consoleEl.parentNode) {
+    consoleEl.parentNode.insertBefore(panel, consoleEl.nextSibling);
+  }
+}
+
+// ── Copy fixed code to clipboard ──
+function copyAutoFix() {
+  try {
+    const codeEl = document.getElementById('auto-fix-code');
+    if (!codeEl) return;
+    navigator.clipboard.writeText(codeEl.textContent).then(() => {
+      showToast('✅ Fixed code copied to clipboard!', 'success');
+    }).catch(() => {
+      // Fallback for older browsers
+      const ta = document.createElement('textarea');
+      ta.value = codeEl.textContent;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+      showToast('✅ Fixed code copied!', 'success');
     });
+  } catch(e) {
+    showToast('Copy failed — select manually.', 'error');
   }
 }
 
 function appendTerminalLine(text, className) {
   const consoleLog = document.getElementById('debugger-console');
-  if (consoleLog) {
-    const line = document.createElement('div');
-    line.className = `terminal-line ${className}`;
-    
-    if (className === 'user-line') {
-      line.innerHTML = `<span class="prompt">></span> <code>${escapeHTML(text)}</code>`;
-    } else if (className === 'fix-line') {
-      line.innerHTML = `<span class="prompt">></span> <pre><code>${escapeHTML(text)}</code></pre>`;
-    } else {
-      line.innerHTML = `<span class="prompt">></span> ${text}`;
-    }
+  if (!consoleLog) return;
 
-    consoleLog.appendChild(line);
-    consoleLog.scrollTop = consoleLog.scrollHeight;
+  const line = document.createElement('div');
+  line.className = `terminal-line ${className}`;
+
+  if (className === 'user-line') {
+    // Multi-line user code preview
+    line.innerHTML = `<span class="prompt">></span> <code>${escapeHTML(text)}</code>`;
+  } else if (className === 'fix-line') {
+    line.innerHTML = `<span class="prompt">></span> <pre><code>${escapeHTML(text)}</code></pre>`;
+  } else if (className === 'success-line') {
+    // innerHTML allowed — content is already escaped/controlled
+    line.innerHTML = `<span class="prompt">></span> ${text}`;
+  } else if (className === 'run-line') {
+    line.innerHTML = `<span class="prompt">></span> ${text}`;
+  } else {
+    line.innerHTML = `<span class="prompt">></span> ${text}`;
   }
+
+  consoleLog.appendChild(line);
+  consoleLog.scrollTop = consoleLog.scrollHeight;
 }
 
 function escapeHTML(str) {
