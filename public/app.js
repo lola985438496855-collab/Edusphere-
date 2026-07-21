@@ -190,12 +190,15 @@ document.addEventListener('DOMContentLoaded', () => {
   setupProjectRegistrationForm();
   setupProfileEditForm();
   setupUIInteractions();
-  setupMatrixWipeOverlay();     // Section 3: Matrix wipe
+  setupMatrixWipeOverlay();      // Section 3: Matrix wipe
   setupTextScramblerOnButtons(); // Section 3: Text scrambler
   loadLocalSettings();           // BUG-4: load stored settings
 
   // Set checklist template event delegator
   document.getElementById('dash-checklist').addEventListener('change', handleChecklistItemChange);
+
+  // SECTION 1 FIX: Restore session from LocalStorage on page reload
+  restoreSessionFromStorage();
 });
 
 // A. Clock Runner
@@ -430,6 +433,9 @@ function setupAuthForm() {
   });
 
   function handleSuccessfulLogin() {
+    // SECTION 1 FIX: Persist session to LocalStorage immediately
+    localStorage.setItem('edusphere_session', JSON.stringify(state.currentUser));
+
     showToast(
       state.currentLang === 'en' 
         ? `Authentication successful. Welcome node: ${state.currentUser.name}`
@@ -446,20 +452,21 @@ function setupAuthForm() {
     nav.style.opacity = '1';
     nav.style.pointerEvents = 'auto';
 
+    // Clear auth form fields safely
     document.getElementById('auth-name').value = '';
     document.getElementById('auth-email').value = '';
     document.getElementById('auth-password').value = '';
-    document.getElementById('auth-code').value = '';
     document.getElementById('auth-student-id').value = '';
 
-    // Streamlined Dynamic Redirection
-    if (state.currentUser.role === 'Evaluator' || state.currentUser.role === 'Engineer') {
+    // SECTION 1 FIX: Normalize role case before routing
+    const role = (state.currentUser.role || '').toLowerCase();
+    if (role === 'evaluator' || role === 'engineer' || role === 'admin') {
       switchView('evaluator');
     } else {
       switchView('dashboard');
     }
 
-    // BUG-1: Start alliance notification polling (Students only)
+    // BUG-1: Start alliance notification polling
     startAlliancePolling();
   }
 
@@ -469,6 +476,9 @@ function setupAuthForm() {
     state.currentUser = null;
     state.authMode = 'login';
     state.wantsEvaluator = false;
+
+    // SECTION 1 FIX: Clear persisted session from LocalStorage
+    localStorage.removeItem('edusphere_session');
 
     // BUG-1: Stop alliance polling on logout
     if (state.alliancePollInterval) {
@@ -491,6 +501,38 @@ function setupAuthForm() {
     switchView('auth');
     showToast(state.currentLang === 'en' ? 'Session terminated.' : 'تم إنهاء الجلسة البرمجية.', 'info');
   });
+}
+
+// SECTION 1 FIX: Restore session from LocalStorage on page reload
+function restoreSessionFromStorage() {
+  try {
+    const saved = localStorage.getItem('edusphere_session');
+    if (!saved) return;
+    const user = JSON.parse(saved);
+    if (!user || !user.id || !user.email) return;
+
+    state.currentUser = user;
+
+    document.getElementById('header-avatar').src = user.avatar || '';
+    document.getElementById('header-username').textContent = user.name;
+    document.getElementById('header-userrole').textContent = user.role;
+
+    const nav = document.querySelector('.nav-links');
+    nav.style.opacity = '1';
+    nav.style.pointerEvents = 'auto';
+
+    // Route to correct view based on normalized role
+    const role = (user.role || '').toLowerCase();
+    if (role === 'evaluator' || role === 'engineer' || role === 'admin') {
+      switchView('evaluator');
+    } else {
+      switchView('dashboard');
+    }
+
+    startAlliancePolling();
+  } catch (e) {
+    localStorage.removeItem('edusphere_session');
+  }
 }
 
 // E. Student Dashboard Module
@@ -1684,25 +1726,37 @@ function onCardMouseMove(e) {
   const xc = rect.width / 2;
   const yc = rect.height / 2;
 
-  let angleX = (yc - y) / 13;
-  let angleY = (x - xc) / 13;
+  // SECTION 2 FIX: If card has interactive elements, use gentle lift only
+  const hasInteractives = card.querySelector('button, input, select, textarea, form');
+  if (hasInteractives) {
+    if (tiltRAF) cancelAnimationFrame(tiltRAF);
+    tiltRAF = requestAnimationFrame(() => {
+      card.style.transform = 'translateY(-4px)';
+      card.style.boxShadow = '0 8px 25px var(--accent-cyan-glow)';
+      card.style.borderColor = 'var(--accent-cyan)';
+    });
+    return;
+  }
 
-  // Constraint angles to max 8deg for immersive 3D perspective
-  angleX = Math.max(-8, Math.min(8, angleX));
-  angleY = Math.max(-8, Math.min(8, angleY));
+  let angleX = (yc - y) / 18;
+  let angleY = (x - xc) / 18;
+
+  // SECTION 2 FIX: Constrain angles to max 5deg (was 8deg)
+  angleX = Math.max(-5, Math.min(5, angleX));
+  angleY = Math.max(-5, Math.min(5, angleY));
 
   // Coord-based 3D glow offsets (moving glow source dynamically)
   const dx = (x - xc) / xc; // -1 to 1
   const dy = (y - yc) / yc; // -1 to 1
-  const shadowX = -dx * 15;
-  const shadowY = -dy * 15;
+  const shadowX = -dx * 12;
+  const shadowY = -dy * 12;
 
   if (tiltRAF) {
     cancelAnimationFrame(tiltRAF);
   }
 
   tiltRAF = requestAnimationFrame(() => {
-    card.style.transform = `perspective(800px) rotateX(${angleX}deg) rotateY(${angleY}deg) scale3d(1.04, 1.04, 1.04)`;
+    card.style.transform = `perspective(1000px) rotateX(${angleX}deg) rotateY(${angleY}deg) scale3d(1.02, 1.02, 1.02)`;
     card.style.boxShadow = `${shadowX}px ${shadowY}px 25px var(--accent-cyan-glow), 0 0 30px rgba(0, 0, 0, 0.5)`;
     card.style.borderColor = 'var(--accent-cyan)';
   });
@@ -1717,7 +1771,7 @@ function onCardMouseLeave(e) {
   }
 
   tiltRAF = requestAnimationFrame(() => {
-    card.style.transform = `perspective(800px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)`;
+    card.style.transform = '';
     card.style.boxShadow = '';
     card.style.borderColor = '';
   });
