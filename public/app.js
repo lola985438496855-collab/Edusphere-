@@ -1721,13 +1721,19 @@ function onCardMouseMove(e) {
   angleX = Math.max(-8, Math.min(8, angleX));
   angleY = Math.max(-8, Math.min(8, angleY));
 
+  // Coord-based 3D glow offsets (moving glow source dynamically)
+  const dx = (x - xc) / xc; // -1 to 1
+  const dy = (y - yc) / yc; // -1 to 1
+  const shadowX = -dx * 15;
+  const shadowY = -dy * 15;
+
   if (tiltRAF) {
     cancelAnimationFrame(tiltRAF);
   }
 
   tiltRAF = requestAnimationFrame(() => {
     card.style.transform = `perspective(800px) rotateX(${angleX}deg) rotateY(${angleY}deg) scale3d(1.04, 1.04, 1.04)`;
-    card.style.boxShadow = `0 20px 50px var(--accent-cyan-glow), 0 0 30px rgba(0, 0, 0, 0.5)`;
+    card.style.boxShadow = `${shadowX}px ${shadowY}px 25px var(--accent-cyan-glow), 0 0 30px rgba(0, 0, 0, 0.5)`;
     card.style.borderColor = 'var(--accent-cyan)';
   });
 }
