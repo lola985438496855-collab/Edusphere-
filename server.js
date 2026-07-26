@@ -958,8 +958,8 @@ app.get('/app.js', (req, res) => {
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.resolve('public')));
 
-// 3. Explicit Root Handler & Client SPA Fallback for Vercel
-app.get('/', (req, res) => {
+// 3. Bulletproof SPA Index HTML Sender for Vercel
+function sendIndexHtml(res) {
   const candidatePaths = [
     path.join(__dirname, 'public', 'index.html'),
     path.join(__dirname, '../public', 'index.html'),
@@ -967,35 +967,25 @@ app.get('/', (req, res) => {
     path.resolve('index.html')
   ];
   for (const p of candidatePaths) {
-    if (fs.existsSync(p)) {
-      try {
+    try {
+      if (fs.existsSync(p)) {
         const html = fs.readFileSync(p, 'utf8');
-        return res.type('text/html').send(html);
-      } catch (e) {}
-    }
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.status(200).send(html);
+      }
+    } catch (e) {}
   }
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.status(200).send('<!DOCTYPE html><html><head><title>EduSphere Platform</title></head><body><h2>EduSphere Platform Online</h2></body></html>');
-});
+}
+
+app.get('/', (req, res) => sendIndexHtml(res));
 
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ error: 'Endpoint not found', status: 404 });
   }
-  const candidatePaths = [
-    path.join(__dirname, 'public', 'index.html'),
-    path.join(__dirname, '../public', 'index.html'),
-    path.resolve('public/index.html'),
-    path.resolve('index.html')
-  ];
-  for (const p of candidatePaths) {
-    if (fs.existsSync(p)) {
-      try {
-        const html = fs.readFileSync(p, 'utf8');
-        return res.type('text/html').send(html);
-      } catch (e) {}
-    }
-  }
-  res.status(200).send('<!DOCTYPE html><html><head><title>EduSphere Platform</title></head><body><h2>EduSphere Platform Serverless</h2></body></html>');
+  sendIndexHtml(res);
 });
 
 // ==========================================
