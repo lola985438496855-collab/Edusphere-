@@ -958,7 +958,25 @@ app.get('/app.js', (req, res) => {
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.resolve('public')));
 
-// 3. Client SPA Fallback with safe fs.readFileSync for Vercel
+// 3. Explicit Root Handler & Client SPA Fallback for Vercel
+app.get('/', (req, res) => {
+  const candidatePaths = [
+    path.join(__dirname, 'public', 'index.html'),
+    path.join(__dirname, '../public', 'index.html'),
+    path.resolve('public/index.html'),
+    path.resolve('index.html')
+  ];
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) {
+      try {
+        const html = fs.readFileSync(p, 'utf8');
+        return res.type('text/html').send(html);
+      } catch (e) {}
+    }
+  }
+  res.status(200).send('<!DOCTYPE html><html><head><title>EduSphere Platform</title></head><body><h2>EduSphere Platform Online</h2></body></html>');
+});
+
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ error: 'Endpoint not found', status: 404 });
