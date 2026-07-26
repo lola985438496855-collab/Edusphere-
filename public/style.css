@@ -3466,3 +3466,171 @@ html[dir="rtl"] .proactive-nudge-container {
 .proactive-nudge-toast .nudge-icon { font-size: 1.4rem; }
 .proactive-nudge-toast h5 { margin: 0 0 0.2rem 0; color: var(--accent-amber); font-size: 0.85rem; }
 .proactive-nudge-toast p { margin: 0; font-size: 0.78rem; color: var(--text-secondary); }
+
+/* ==========================================================================
+   ENTERPRISE REFACTORING & FEATURE STYLES
+   ========================================================================== */
+
+/* Issue 10: Dynamic RTL/LTR Code Alignment Fix */
+html[dir="rtl"] .sandbox-code-editor,
+html[dir="rtl"] .codeInput,
+html[dir="rtl"] code,
+html[dir="rtl"] pre,
+html[dir="rtl"] .auto-fix-panel,
+html[dir="rtl"] .terminal-line {
+  direction: ltr !important;
+  text-align: left !important;
+}
+
+/* Feature 12: Adaptive Themes (OLED Black, High-Contrast Neon, Cyberpunk Cyan) */
+html[data-theme="oled"], body[data-theme="oled"] {
+  --bg-primary: #000000;
+  --bg-secondary: #080808;
+  --bg-tertiary: #121212;
+  --glass-bg: rgba(5, 5, 5, 0.95);
+  --glass-border: rgba(0, 240, 255, 0.25);
+  --text-primary: #ffffff;
+  --text-secondary: #8b949e;
+  --accent-cyan: #00f0ff;
+}
+
+html[data-theme="high-contrast"], body[data-theme="high-contrast"] {
+  --bg-primary: #000000;
+  --bg-secondary: #000000;
+  --bg-tertiary: #1a1a1a;
+  --glass-bg: #000000;
+  --glass-border: #ffff00;
+  --text-primary: #ffffff;
+  --text-secondary: #ffff00;
+  --text-muted: #ffffff;
+  --accent-cyan: #00ffff;
+  --accent-green: #00ff00;
+  --accent-amber: #ffaa00;
+}
+
+/* Offline Connection Status Badge (Feature 11) */
+.offline-status-badge {
+  position: fixed;
+  top: 70px;
+  right: 24px;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  backdrop-filter: blur(8px);
+  transition: all 0.3s ease;
+}
+html[dir="rtl"] .offline-status-badge {
+  right: auto;
+  left: 24px;
+}
+.offline-status-badge.online {
+  background: rgba(57, 255, 20, 0.12);
+  border: 1px solid var(--accent-green);
+  color: var(--accent-green);
+  box-shadow: 0 0 10px var(--accent-green-glow);
+}
+.offline-status-badge.offline {
+  background: rgba(255, 183, 0, 0.12);
+  border: 1px solid var(--accent-amber);
+  color: var(--accent-amber);
+  box-shadow: 0 0 10px var(--accent-amber-glow);
+}
+.status-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
+  animation: pulse 1.5s infinite;
+}
+
+/* Sandbox Security Vulnerability Inspector (Feature 4) */
+.sandbox-vulnerability-panel {
+  background: rgba(255, 183, 0, 0.06);
+  border-bottom: 1px solid var(--accent-amber);
+  padding: 0.8rem 1.2rem;
+}
+.sandbox-vulnerability-panel.hidden { display: none; }
+.vuln-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--accent-amber);
+  font-weight: 700;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+.vuln-item {
+  background: rgba(0, 0, 0, 0.4);
+  border-left: 3px solid var(--accent-amber);
+  padding: 0.5rem 0.8rem;
+  margin-bottom: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  border-radius: 0 4px 4px 0;
+}
+
+/* Evaluator Analytics Heatmap Grid (Feature 9) */
+.evaluator-heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+.heatmap-cell {
+  background: var(--bg-secondary);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 0.8rem;
+  text-align: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.heatmap-cell:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 0 15px var(--accent-cyan-glow);
+}
+.cell-score {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--accent-cyan);
+}
+.cell-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+}
+
+/* Issue 15: Responsive Sandbox Layout Stacking */
+@media (max-width: 768px) {
+  .sandbox-modal-content {
+    width: 95%;
+    height: 90vh;
+  }
+  .sandbox-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+    height: auto;
+  }
+  .sandbox-editor-side {
+    border-right: none;
+    border-bottom: 1px solid var(--glass-border);
+    height: 250px;
+  }
+  .sandbox-preview-side {
+    height: 250px;
+  }
+  .ai-copilot-drawer {
+    width: 100vw;
+    right: -100vw;
+  }
+  html[dir="rtl"] .ai-copilot-drawer {
+    left: -100vw;
+  }
+}
+

@@ -15,10 +15,22 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Tajawal:wght@300;500;700;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('edusphere_theme') || 'cyber';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
 </head>
 <body data-theme="cyber">
   <!-- Canvas overlay for evaluation confetti explosion -->
   <canvas id="confetti-canvas"></canvas>
+
+  <!-- Offline Status Connection Badge (Feature 11) -->
+  <div id="offline-status-badge" class="offline-status-badge online">
+    <span class="status-pulse-dot"></span>
+    <span id="offline-status-text">ONLINE ⚡</span>
+  </div>
 
   <!-- Collaborative Cursors Layer (Pillar 13) -->
   <div id="collaborative-cursors-layer"></div>
@@ -768,17 +780,29 @@
             <span>🧪 AI Code Playground & Sandbox</span>
           </div>
           <div class="sandbox-header-actions">
+            <button id="sandbox-inspect-btn" class="secondary-btn">🛡️ Inspect Vulnerabilities</button>
+            <button id="sandbox-autofix-btn" class="primary-btn glow-btn" style="display:none; border-color:var(--accent-amber); box-shadow: 0 0 10px var(--accent-amber-glow);">⚡ Auto-Fix Vulnerability</button>
             <button id="sandbox-run-btn" class="primary-btn glow-btn">▶ Run Code & Preview</button>
             <button id="sandbox-modal-close" class="modal-close-btn">&times;</button>
           </div>
         </div>
+        
+        <!-- Live Vulnerability Inspector Panel (Feature 4) -->
+        <div id="sandbox-vulnerability-panel" class="sandbox-vulnerability-panel hidden">
+          <div class="vuln-header">
+            <span>🛡️ Live Security Inspection Results</span>
+            <button id="close-vuln-panel-btn" class="ghost-btn">&times;</button>
+          </div>
+          <div id="sandbox-vuln-list" class="vuln-list"></div>
+        </div>
+
         <div class="sandbox-body">
           <div class="sandbox-editor-side">
             <div class="sandbox-tabs">
               <button class="sandbox-tab active" data-lang="html">HTML/CSS/JS</button>
               <button class="sandbox-tab" data-lang="cpp">Arduino / C++</button>
             </div>
-            <textarea id="sandbox-code-editor" class="sandbox-code-editor" spellcheck="false"><!-- Write or paste code to test live -->
+            <textarea id="sandbox-code-editor" class="sandbox-code-editor" spellcheck="false" dir="ltr"><!-- Write or paste code to test live -->
 <div style="color: #00f0ff; font-family: sans-serif; text-align: center; padding: 2rem;">
   <h2>🚀 EduSphere Live AI Sandbox</h2>
   <p>Modify HTML/CSS/JS live and click Run Code!</p>
