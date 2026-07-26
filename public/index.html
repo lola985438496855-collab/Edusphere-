@@ -4,15 +4,42 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EduSphere | Digital Engineering Eco-System</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#00f0ff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=192&q=80">
+
   <!-- Google Fonts for English and Arabic -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Tajawal:wght@300;500;700;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body data-theme="cyber">
   <!-- Canvas overlay for evaluation confetti explosion -->
   <canvas id="confetti-canvas"></canvas>
+
+  <!-- Collaborative Cursors Layer (Pillar 13) -->
+  <div id="collaborative-cursors-layer"></div>
+
+  <!-- Onboarding Spotlight Overlay (Pillar 9) -->
+  <div id="onboarding-overlay" class="onboarding-overlay">
+    <div id="onboarding-highlight-box" class="onboarding-highlight-box"></div>
+    <div id="onboarding-card" class="onboarding-card glass-panel">
+      <div class="onboarding-badge">🤖 AI COPILOT TOUR</div>
+      <h3 id="onboarding-title">Welcome to EduSphere!</h3>
+      <p id="onboarding-desc">Let's walk through the core features of your digital engineering hub.</p>
+      <div class="onboarding-actions">
+        <button id="onboarding-prev-btn" class="secondary-btn">Back</button>
+        <button id="onboarding-next-btn" class="primary-btn">Next Step</button>
+        <button id="onboarding-skip-btn" class="ghost-btn">Skip Tour</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Proactive AI Nudge Toast Container (Pillar 10) -->
+  <div id="proactive-nudge-container" class="proactive-nudge-container"></div>
 
   <!-- Matrix Screen Wipe Overlay for navigation transitions -->
   <div id="matrix-wipe-overlay">
@@ -41,6 +68,12 @@
           </div>
           <span id="digital-clock">00:00:00 AM</span>
         </div>
+        
+        <!-- Live Active Collaborators Bar (Pillar 13) -->
+        <div id="active-collaborators-bar" class="collaborators-bar" title="Live Collaborative Active Nodes">
+          <span class="collaborator-dot"></span>
+          <span id="collaborators-count">1 Node Live</span>
+        </div>
       </div>
 
       <nav class="header-center">
@@ -53,6 +86,34 @@
       </nav>
 
       <div class="header-right">
+        <!-- AI Multimodal Quick Controls Toolbar -->
+        <div class="ai-quick-toolbar">
+          <!-- Voice Button (Pillar 2) -->
+          <button id="voice-btn" class="icon-tool-btn" title="Voice-to-Action (Speech Command)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          </button>
+
+          <!-- Vision Upload Button (Pillar 3) -->
+          <button id="vision-btn" class="icon-tool-btn" title="Image & Screenshot Analyzer">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </button>
+
+          <!-- Code Sandbox Button (Pillar 8) -->
+          <button id="sandbox-btn" class="icon-tool-btn" title="Interactive AI Code Sandbox">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          </button>
+
+          <!-- Smart PDF/Excel Export Button (Pillar 6) -->
+          <button id="export-pdf-btn" class="icon-tool-btn" title="Export Summary Report (PDF/Excel)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
+
+          <!-- Adaptive Theme Switcher (Pillar 5) -->
+          <button id="theme-toggle-btn" class="icon-tool-btn" title="Switch Dynamic Cyber Theme">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          </button>
+        </div>
+
         <!-- Dual language Toggle Switch -->
         <button id="lang-toggle-btn" class="lang-switch-btn">
           <span class="lang-text current-lang">EN</span>
@@ -620,8 +681,123 @@
       </div>
     </div>
 
+    <!-- 🤖 PILLAR 1: FLOATING AI COPILOT ACTION TRIGGER BUTTON -->
+    <button id="ai-copilot-trigger" class="ai-floating-trigger-btn" title="Open AI Copilot Assistant (Ctrl+K)">
+      <span class="ai-sparkle-icon">🤖</span>
+      <span class="ai-trigger-label">AI Copilot</span>
+    </button>
+
+    <!-- 🤖 PILLAR 1: CONTEXT-AWARE AI COPILOT DRAWER -->
+    <div id="ai-copilot-drawer" class="ai-copilot-drawer">
+      <div class="copilot-header">
+        <div class="copilot-title-group">
+          <span class="copilot-icon">🤖</span>
+          <div>
+            <h3>EduSphere AI Copilot</h3>
+            <span class="copilot-status-badge">Context-Aware Active</span>
+          </div>
+        </div>
+        <button id="copilot-close-btn" class="copilot-close-btn">&times;</button>
+      </div>
+
+      <div class="copilot-quick-actions">
+        <button class="copilot-chip" data-cmd="explain">💡 Explain View</button>
+        <button class="copilot-chip" data-cmd="summarize">📄 Summarize Page</button>
+        <button class="copilot-chip" data-cmd="security">🛡️ Scan Security</button>
+        <button class="copilot-chip" data-cmd="tour">🗺️ Guided Tour</button>
+      </div>
+
+      <div id="copilot-chat-history" class="copilot-chat-history">
+        <div class="copilot-msg system">
+          👋 Hello! I am your <b>Context-Aware AI Copilot</b>. I can inspect your screen, run voice commands, execute code in the sandbox, or automate UI actions. How can I assist your engineering work today?
+        </div>
+      </div>
+
+      <div class="copilot-input-bar">
+        <input type="text" id="copilot-input" placeholder="Ask AI Copilot or type a command... (e.g. 'Go to showroom')">
+        <button id="copilot-voice-btn" class="copilot-voice-btn" title="Voice Input">🎙️</button>
+        <button id="copilot-send-btn" class="copilot-send-btn">Send</button>
+      </div>
+    </div>
+
+    <!-- 🎙️ PILLAR 2: VOICE-TO-ACTION MODAL / WAVEFORM OVERLAY -->
+    <div id="voice-modal" class="modal-overlay">
+      <div class="voice-modal-content glass-panel">
+        <button id="voice-modal-close" class="modal-close-btn">&times;</button>
+        <div class="voice-status-icon">🎙️</div>
+        <h3>Voice-to-Action Speech Command</h3>
+        <p id="voice-transcript-text">Listening... Speak in Arabic or English...</p>
+        <div class="voice-waveform">
+          <span class="wave-bar"></span>
+          <span class="wave-bar"></span>
+          <span class="wave-bar"></span>
+          <span class="wave-bar"></span>
+          <span class="wave-bar"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 📸 PILLAR 3: IMAGE & SCREENSHOT ANALYZER MODAL -->
+    <div id="vision-modal" class="modal-overlay">
+      <div class="vision-modal-content glass-panel">
+        <button id="vision-modal-close" class="modal-close-btn">&times;</button>
+        <div class="modal-header">
+          <h3>📸 Multimodal Image & Screenshot Analyzer</h3>
+          <p>Drag and drop a UI screenshot or code image to extract text, identify errors, and get instant AI recommendations.</p>
+        </div>
+        <div id="vision-dropzone" class="vision-dropzone">
+          <input type="file" id="vision-file-input" accept="image/*" style="display:none;">
+          <div class="dropzone-prompt">
+            <span class="drop-icon">📥</span>
+            <p>Drag & Drop UI Screenshot / Error Image Here</p>
+            <button id="vision-browse-btn" class="secondary-btn">Browse File</button>
+          </div>
+        </div>
+        <div id="vision-preview-area" class="vision-preview-area hidden">
+          <img id="vision-preview-img" src="" alt="Screenshot preview">
+          <div id="vision-analysis-result" class="vision-analysis-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 🧪 PILLAR 8: INTERACTIVE AI CODE PLAYGROUND & SANDBOX MODAL -->
+    <div id="sandbox-modal" class="modal-overlay">
+      <div class="sandbox-modal-content glass-panel">
+        <div class="sandbox-header">
+          <div class="sandbox-title-group">
+            <span>🧪 AI Code Playground & Sandbox</span>
+          </div>
+          <div class="sandbox-header-actions">
+            <button id="sandbox-run-btn" class="primary-btn glow-btn">▶ Run Code & Preview</button>
+            <button id="sandbox-modal-close" class="modal-close-btn">&times;</button>
+          </div>
+        </div>
+        <div class="sandbox-body">
+          <div class="sandbox-editor-side">
+            <div class="sandbox-tabs">
+              <button class="sandbox-tab active" data-lang="html">HTML/CSS/JS</button>
+              <button class="sandbox-tab" data-lang="cpp">Arduino / C++</button>
+            </div>
+            <textarea id="sandbox-code-editor" class="sandbox-code-editor" spellcheck="false"><!-- Write or paste code to test live -->
+<div style="color: #00f0ff; font-family: sans-serif; text-align: center; padding: 2rem;">
+  <h2>🚀 EduSphere Live AI Sandbox</h2>
+  <p>Modify HTML/CSS/JS live and click Run Code!</p>
+  <button onclick="alert('Hello from EduSphere Sandbox!')" style="background:#00f0ff; color:#0d1117; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer;">Test Interactive Trigger</button>
+</div></textarea>
+          </div>
+          <div class="sandbox-preview-side">
+            <div class="preview-header">Live Output Frame</div>
+            <iframe id="sandbox-preview-frame" class="sandbox-preview-frame"></iframe>
+            <div id="sandbox-console-output" class="sandbox-console-output">> Sandbox Console Ready</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
+  <!-- Socket.io Client Script -->
+  <script src="/socket.io/socket.io.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

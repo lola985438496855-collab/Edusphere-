@@ -5,7 +5,15 @@ const path    = require('path');
 const fs      = require('fs');
 const { createClient } = require('@supabase/supabase-js');
 
+const http    = require('http');
+const { Server } = require('socket.io');
+
 const app  = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: '*', methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }
+});
+
 const PORT = process.env.PORT || 3000;
 
 // ---- Supabase Client ----
@@ -68,6 +76,34 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));   // allow large Base64 avatar payloads
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ==========================================
+//  PILLAR 11: AI SECURITY INPUT VALIDATOR
+// ==========================================
+function validatePayloadSecurity(req, res, next) {
+  if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.body) {
+    const payloadStr = JSON.stringify(req.body);
+    
+    // Check for API key leaks
+    const apiKeyRegex = /(sk-[a-zA-Z0-9]{24,}|AKIA[0-9A-Z]{16}|ghp_[a-zA-Z0-9]{36})/;
+    if (apiKeyRegex.test(payloadStr)) {
+      return res.status(400).json({
+        error: '🛡️ Security Block: Potential sensitive API key leak detected in input payload.'
+      });
+    }
+
+    // Check for dangerous script injection
+    const xssRegex = /<\s*script[^>]*>[\s\S]*?<\s*\/\s*script\s*>/i;
+    if (xssRegex.test(payloadStr)) {
+      return res.status(400).json({
+        error: '🛡️ Security Block: Potentially unsafe script tag payload detected.'
+      });
+    }
+  }
+  next();
+}
+
+app.use(validatePayloadSecurity);
 
 // ==========================================
 //  BUG-6 EVALUATOR ROLE GATEWAY MIDDLEWARE
@@ -732,12 +768,53 @@ app.get('/api/evaluations/:projectId', evaluatorRoleGuard, async (req, res) => {
 });
 
 // ==========================================
+//  PILLAR 4 & 13: REAL-TIME SOCKET.IO ENGINE
+// ==========================================
+const connectedCollaborators = new Map();
+
+io.on('connection', (socket) => {
+  socket.on('user_join', (userData) => {
+    connectedCollaborators.set(socket.id, {
+      socketId: socket.id,
+      id: userData.id || socket.id,
+      name: userData.name || 'Anonymous Node',
+      role: userData.role || 'Student',
+      x: 0,
+      y: 0
+    });
+    io.emit('collaborators_update', Array.from(connectedCollaborators.values()));
+  });
+
+  socket.on('cursor_move', (coords) => {
+    const user = connectedCollaborators.get(socket.id);
+    if (user) {
+      user.x = coords.x;
+      user.y = coords.y;
+      socket.broadcast.emit('collaborator_cursor', {
+        socketId: socket.id,
+        name: user.name,
+        role: user.role,
+        x: coords.x,
+        y: coords.y
+      });
+    }
+  });
+
+  socket.on('disconnect', () => {
+    connectedCollaborators.delete(socket.id);
+    io.emit('collaborators_update', Array.from(connectedCollaborators.values()));
+    io.emit('collaborator_left', socket.id);
+  });
+});
+
+// ==========================================
 //  START SERVER
 // ==========================================
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, async () => {
+  server.listen(PORT, async () => {
     console.log(`===========================================================`);
     console.log(` EduSphere Server online → http://localhost:${PORT}`);
+    console.log(` Real-Time Sockets: Socket.io Enabled`);
     console.log(` Database: Supabase PostgreSQL`);
     console.log(` Project : ${SUPABASE_URL}`);
     console.log(`===========================================================`);
