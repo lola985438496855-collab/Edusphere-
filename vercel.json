@@ -1,17 +1,16 @@
 {
   "version": 2,
-  "routes": [
+  "redirects": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/index.js"
-    },
+      "source": "/",
+      "destination": "/index.html",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
     {
-      "src": "/",
-      "dest": "/index.html"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/$1"
+      "source": "/api/(.*)",
+      "destination": "/api/index.js"
     }
   ]
 }
