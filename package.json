@@ -1,7 +1,7 @@
 {
   "name": "edusphere",
-  "version": "1.0.0",
-  "description": "EduSphere (سفينة المستقبل التعليمية) - All-in-one digital eco-system for tech students and evaluators",
+  "version": "1.1.0",
+  "description": "EduSphere (سفينة المستقبل التعليمية) - Master AI & Enterprise Platform 2026",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
