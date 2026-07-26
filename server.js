@@ -941,23 +941,29 @@ app.use('/api/*', (req, res) => {
 // 2. Static Assets Serving
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 3. Client SPA Fallback with safe file check for Vercel
+// 3. Client SPA Fallback with safe multi-path resolution for Vercel
 app.get('*', (req, res) => {
-  const htmlPath = path.join(__dirname, 'public', 'index.html');
-  if (fs.existsSync(htmlPath)) {
-    return res.sendFile(htmlPath);
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ error: 'Endpoint not found', status: 404 });
   }
-  const altPath = path.resolve('public/index.html');
-  if (fs.existsSync(altPath)) {
-    return res.sendFile(altPath);
+  const candidatePaths = [
+    path.join(__dirname, 'public', 'index.html'),
+    path.join(__dirname, '../public', 'index.html'),
+    path.resolve('public/index.html'),
+    path.resolve('index.html')
+  ];
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) {
+      return res.sendFile(p);
+    }
   }
-  res.status(200).send('<!DOCTYPE html><html><head><title>EduSphere API</title></head><body><h2>EduSphere Serverless API Online</h2></body></html>');
+  res.status(200).send('<!DOCTYPE html><html><head><title>EduSphere Platform</title></head><body><h2>EduSphere Platform Serverless</h2></body></html>');
 });
 
 // ==========================================
 //  START SERVER
 // ==========================================
-if (process.env.NODE_ENV !== 'production') {
+if (!process.env.VERCEL && process.env.NODE_ENV !== 'production') {
   server.listen(PORT, async () => {
     console.log(`===========================================================`);
     console.log(` EduSphere Server online → http://localhost:${PORT}`);
@@ -968,7 +974,7 @@ if (process.env.NODE_ENV !== 'production') {
     await initializeSeededEvaluators();
   });
 } else {
-  // In production (Vercel serverless), lazy-seed asynchronously without blocking cold start
+  // In production / Vercel serverless, lazy-seed asynchronously without blocking cold start
   initializeSeededEvaluators().catch(() => {});
 }
 
