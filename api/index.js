@@ -1,6 +1,8 @@
 require('dotenv').config();
 const express   = require('express');
 const cors      = require('cors');
+const path      = require('path');
+const fs        = require('fs');
 const { createClient } = require('@supabase/supabase-js');
 const bcrypt    = require('bcryptjs');
 const jwt       = require('jsonwebtoken');
@@ -450,13 +452,24 @@ router.get('/evaluations/:projectId', authenticateJWT, evaluatorRoleGuard, async
   }
 });
 
-// Mount router on both /api and / for maximum route matching flexibility
+// Mount router for API requests
 app.use('/api', router);
-app.use('/', router);
 
-// --- 404 Fallback ---
-app.use('*', (req, res) => {
-  res.status(404).json({ error: 'Endpoint not found', status: 404 });
+// Serve static assets from public directory
+const publicDir = path.join(__dirname, '../public');
+app.use(express.static(publicDir));
+app.use('/public', express.static(publicDir));
+
+// Fallback for non-API client routes -> Send index.html
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ error: 'Endpoint not found', status: 404 });
+  }
+  const htmlPath = path.join(publicDir, 'index.html');
+  if (fs.existsSync(htmlPath)) {
+    return res.sendFile(htmlPath);
+  }
+  res.status(200).send('<!DOCTYPE html><html><body><h2>EduSphere Platform</h2></body></html>');
 });
 
 module.exports = app;
