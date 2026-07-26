@@ -72,16 +72,17 @@ function safeParseJSON(val, defaultVal = []) {
 }
 
 // ==========================================
-//  API ENDPOINTS
+//  EXPRESS ROUTER (Matches /api/... and /...)
 // ==========================================
+const router = express.Router();
 
 // --- Health Check ---
-app.get('/api/health', (req, res) => {
+router.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), platform: 'Vercel Serverless' });
 });
 
 // --- AUTH: Login ---
-app.post('/api/auth/login', async (req, res) => {
+router.post('/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
@@ -133,7 +134,7 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // --- AUTH: Register ---
-app.post('/api/auth/register', async (req, res) => {
+router.post('/auth/register', async (req, res) => {
   try {
     const { name, email, password, studentId, major } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password are required.' });
@@ -199,7 +200,7 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 // --- USERS: Update Profile ---
-app.put('/api/users/update', authenticateJWT, async (req, res) => {
+router.put('/users/update', authenticateJWT, async (req, res) => {
   try {
     const { name, bio, status, skills, avatar, targetId } = req.body;
     if (targetId && targetId !== req.user.id) {
@@ -245,7 +246,7 @@ app.put('/api/users/update', authenticateJWT, async (req, res) => {
 });
 
 // --- PROJECTS: Get All ---
-app.get('/api/projects', async (req, res) => {
+router.get('/projects', async (req, res) => {
   try {
     const { data: projects, error } = await supabase.from('projects').select('*').order('created_at', { ascending: false });
     if (error) throw error;
@@ -274,7 +275,7 @@ app.get('/api/projects', async (req, res) => {
 });
 
 // --- PROJECTS: Register New ---
-app.post('/api/projects', authenticateJWT, async (req, res) => {
+router.post('/projects', authenticateJWT, async (req, res) => {
   try {
     const { title, description, teamMembers, techStack, progressPercentage, codebaseUrl, liveDemoUrl, imageUrl, videoUrl } = req.body;
 
@@ -323,7 +324,7 @@ app.post('/api/projects', authenticateJWT, async (req, res) => {
 });
 
 // --- MATCHMAKING: Get Students ---
-app.get('/api/matchmaking/students', async (req, res) => {
+router.get('/matchmaking/students', async (req, res) => {
   try {
     const { data: users, error } = await supabase.from('users').select('*').eq('role', 'Student');
     if (error) throw error;
@@ -348,7 +349,7 @@ app.get('/api/matchmaking/students', async (req, res) => {
 });
 
 // --- ALLIANCES: Incoming & Action ---
-app.get('/api/alliance/incoming/:userId', async (req, res) => {
+router.get('/alliance/incoming/:userId', async (req, res) => {
   try {
     const { data, error } = await supabase.from('alliances').select('*').eq('recipient_id', req.params.userId).order('created_at', { ascending: false });
     if (error) throw error;
@@ -359,7 +360,7 @@ app.get('/api/alliance/incoming/:userId', async (req, res) => {
   }
 });
 
-app.post('/api/alliance/request', async (req, res) => {
+router.post('/alliance/request', async (req, res) => {
   try {
     const { senderId, recipientId, projectName } = req.body;
     const { data: users } = await supabase.from('users').select('id, name').in('id', [senderId, recipientId]);
@@ -383,7 +384,7 @@ app.post('/api/alliance/request', async (req, res) => {
   }
 });
 
-app.post('/api/alliance/accept', async (req, res) => {
+router.post('/alliance/accept', async (req, res) => {
   try {
     await supabase.from('alliances').update({ status: 'accepted' }).eq('id', req.body.allianceId);
     res.json({ success: true, message: 'Alliance accepted.' });
@@ -392,7 +393,7 @@ app.post('/api/alliance/accept', async (req, res) => {
   }
 });
 
-app.post('/api/alliance/decline', async (req, res) => {
+router.post('/alliance/decline', async (req, res) => {
   try {
     await supabase.from('alliances').update({ status: 'declined' }).eq('id', req.body.allianceId);
     res.json({ success: true, message: 'Alliance declined.' });
@@ -402,7 +403,7 @@ app.post('/api/alliance/decline', async (req, res) => {
 });
 
 // --- EVALUATIONS ---
-app.post('/api/evaluations', authenticateJWT, evaluatorRoleGuard, async (req, res) => {
+router.post('/evaluations', authenticateJWT, evaluatorRoleGuard, async (req, res) => {
   try {
     const { projectId, grades, feedback } = req.body;
     const { uiUx, codeArchitecture, databaseEfficiency, innovation } = grades || {};
@@ -432,7 +433,7 @@ app.post('/api/evaluations', authenticateJWT, evaluatorRoleGuard, async (req, re
   }
 });
 
-app.get('/api/evaluations/:projectId', authenticateJWT, evaluatorRoleGuard, async (req, res) => {
+router.get('/evaluations/:projectId', authenticateJWT, evaluatorRoleGuard, async (req, res) => {
   try {
     const { data: evals, error } = await supabase.from('evaluations').select('*').eq('project_id', req.params.projectId);
     if (error) throw error;
@@ -449,8 +450,12 @@ app.get('/api/evaluations/:projectId', authenticateJWT, evaluatorRoleGuard, asyn
   }
 });
 
-// --- 404 Fallback for API ---
-app.use('/api/*', (req, res) => {
+// Mount router on both /api and / for maximum route matching flexibility
+app.use('/api', router);
+app.use('/', router);
+
+// --- 404 Fallback ---
+app.use('*', (req, res) => {
   res.status(404).json({ error: 'Endpoint not found', status: 404 });
 });
 
