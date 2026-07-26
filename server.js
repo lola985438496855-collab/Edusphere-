@@ -34,39 +34,47 @@ const SEEDED_EVALUATORS = [
   { id: 'eval-static-007', name: 'Eng. Yara Hassan',        email: 'yara@edusphere.edu',    password: 'yara_eval_2026',    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80' },
 ];
 
+let isEvaluatorsSeeded = false;
+
 // Seed evaluator accounts with bcrypt hashed passwords (Issue 1)
 async function initializeSeededEvaluators() {
-  console.log('🔑 Checking pre-seeded evaluator accounts...');
-  for (const ev of SEEDED_EVALUATORS) {
-    const { data: existing } = await supabase
-      .from('users')
-      .select('id')
-      .eq('id', ev.id)
-      .maybeSingle();
+  if (isEvaluatorsSeeded) return;
+  try {
+    console.log('🔑 Checking pre-seeded evaluator accounts...');
+    for (const ev of SEEDED_EVALUATORS) {
+      const { data: existing } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', ev.id)
+        .maybeSingle();
 
-    if (!existing) {
-      const hashedPassword = await bcrypt.hash(ev.password, 10);
-      const { error } = await supabase.from('users').insert([{
-        id:         ev.id,
-        name:       ev.name,
-        email:      ev.email.toLowerCase(),
-        password:   hashedPassword,
-        role:       'Evaluator',
-        avatar:     ev.avatar,
-        status:     'Available',
-        bio:        'Academic Reviewing Engineer – EduSphere Hub',
-        student_id: null,
-        major:      null,
-        skills:     []
-      }]);
-      if (error) {
-        console.warn(`⚠️  Could not seed evaluator ${ev.name}:`, error.message);
-      } else {
-        console.log(`   ✅ Seeded: ${ev.name} (${ev.email})`);
+      if (!existing) {
+        const hashedPassword = await bcrypt.hash(ev.password, 10);
+        const { error } = await supabase.from('users').insert([{
+          id:         ev.id,
+          name:       ev.name,
+          email:      ev.email.toLowerCase(),
+          password:   hashedPassword,
+          role:       'Evaluator',
+          avatar:     ev.avatar,
+          status:     'Available',
+          bio:        'Academic Reviewing Engineer – EduSphere Hub',
+          student_id: null,
+          major:      null,
+          skills:     []
+        }]);
+        if (error) {
+          console.warn(`⚠️  Could not seed evaluator ${ev.name}:`, error.message);
+        } else {
+          console.log(`   ✅ Seeded: ${ev.name} (${ev.email})`);
+        }
       }
     }
+    isEvaluatorsSeeded = true;
+    console.log('🔑 Evaluator seeding complete.');
+  } catch (err) {
+    console.warn('⚠️ Seeding skipped during serverless startup:', err.message);
   }
-  console.log('🔑 Evaluator seeding complete.');
 }
 
 // ---- Rate Limiters (Issue 8) ----
@@ -918,9 +926,17 @@ app.use('/api/*', (req, res) => {
 // 2. Static Assets Serving
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 3. Client SPA Fallback
+// 3. Client SPA Fallback with safe file check for Vercel
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  const htmlPath = path.join(__dirname, 'public', 'index.html');
+  if (fs.existsSync(htmlPath)) {
+    return res.sendFile(htmlPath);
+  }
+  const altPath = path.resolve('public/index.html');
+  if (fs.existsSync(altPath)) {
+    return res.sendFile(altPath);
+  }
+  res.status(200).send('<!DOCTYPE html><html><head><title>EduSphere API</title></head><body><h2>EduSphere Serverless API Online</h2></body></html>');
 });
 
 // ==========================================
@@ -937,8 +953,8 @@ if (process.env.NODE_ENV !== 'production') {
     await initializeSeededEvaluators();
   });
 } else {
-  // In production (Vercel), run seeding after module load
-  initializeSeededEvaluators().catch(console.warn);
+  // In production (Vercel serverless), lazy-seed asynchronously without blocking cold start
+  initializeSeededEvaluators().catch(() => {});
 }
 
 module.exports = app;
