@@ -1,15 +1,28 @@
-const bcrypt   = require('bcryptjs');
-const jwt      = require('jsonwebtoken');
+require('dotenv').config();
+const express   = require('express');
+const cors      = require('cors');
+const path      = require('path');
+const fs        = require('fs');
+const http      = require('http');
+const { Server } = require('socket.io');
+const bcrypt    = require('bcryptjs');
+const jwt       = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
+const { createClient } = require('@supabase/supabase-js');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'edusphere_super_secret_jwt_key_2026';
 const ADMIN_SECRET = process.env.ADMIN_SECRET || 'edusphere_admin_master_secret_2026';
 
 const app  = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: '*', methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }
-});
+let io;
+try {
+  io = new Server(server, {
+    cors: { origin: '*', methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }
+  });
+} catch (e) {
+  console.warn('Socket.io serverless initialization fallback');
+}
 
 const PORT = process.env.PORT || 3000;
 
@@ -880,40 +893,42 @@ app.get('/api/evaluations/:projectId', evaluatorRoleGuard, async (req, res) => {
 // ==========================================
 const connectedCollaborators = new Map();
 
-io.on('connection', (socket) => {
-  socket.on('user_join', (userData) => {
-    connectedCollaborators.set(socket.id, {
-      socketId: socket.id,
-      id: userData.id || socket.id,
-      name: userData.name || 'Anonymous Node',
-      role: userData.role || 'Student',
-      x: 0,
-      y: 0
-    });
-    io.emit('collaborators_update', Array.from(connectedCollaborators.values()));
-  });
-
-  socket.on('cursor_move', (coords) => {
-    const user = connectedCollaborators.get(socket.id);
-    if (user) {
-      user.x = coords.x;
-      user.y = coords.y;
-      socket.broadcast.emit('collaborator_cursor', {
+if (io) {
+  io.on('connection', (socket) => {
+    socket.on('user_join', (userData) => {
+      connectedCollaborators.set(socket.id, {
         socketId: socket.id,
-        name: user.name,
-        role: user.role,
-        x: coords.x,
-        y: coords.y
+        id: userData.id || socket.id,
+        name: userData.name || 'Anonymous Node',
+        role: userData.role || 'Student',
+        x: 0,
+        y: 0
       });
-    }
-  });
+      io.emit('collaborators_update', Array.from(connectedCollaborators.values()));
+    });
 
-  socket.on('disconnect', () => {
-    connectedCollaborators.delete(socket.id);
-    io.emit('collaborators_update', Array.from(connectedCollaborators.values()));
-    io.emit('collaborator_left', socket.id);
+    socket.on('cursor_move', (coords) => {
+      const user = connectedCollaborators.get(socket.id);
+      if (user) {
+        user.x = coords.x;
+        user.y = coords.y;
+        socket.broadcast.emit('collaborator_cursor', {
+          socketId: socket.id,
+          name: user.name,
+          role: user.role,
+          x: coords.x,
+          y: coords.y
+        });
+      }
+    });
+
+    socket.on('disconnect', () => {
+      connectedCollaborators.delete(socket.id);
+      io.emit('collaborators_update', Array.from(connectedCollaborators.values()));
+      io.emit('collaborator_left', socket.id);
+    });
   });
-});
+}
 
 // ==========================================
 //  STATIC FILES & ROUTE FALLBACKS (Issue 7 & 18)
