@@ -453,12 +453,49 @@ router.get('/evaluations/:projectId', authenticateJWT, evaluatorRoleGuard, async
   }
 });
 
+// Serve Root index.html if Vercel routes / to api/index.js
+app.get('/', (req, res) => {
+  const candidatePaths = [
+    path.join(__dirname, '../index.html'),
+    path.join(__dirname, '../public/index.html'),
+    path.resolve('index.html'),
+    path.resolve('public/index.html')
+  ];
+  for (const p of candidatePaths) {
+    try {
+      if (fs.existsSync(p)) {
+        const html = fs.readFileSync(p, 'utf8');
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.status(200).send(html);
+      }
+    } catch (e) {}
+  }
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.status(200).send('<!DOCTYPE html><html><head><title>EduSphere Platform</title></head><body><h2>EduSphere Platform Online</h2></body></html>');
+});
+
 // Mount router for API requests
 app.use('/api', router);
-app.use('/', router);
 
 // API 404 Fallback
 app.use('*', (req, res) => {
+  if (!req.path.startsWith('/api')) {
+    const candidatePaths = [
+      path.join(__dirname, '../index.html'),
+      path.join(__dirname, '../public/index.html'),
+      path.resolve('index.html'),
+      path.resolve('public/index.html')
+    ];
+    for (const p of candidatePaths) {
+      try {
+        if (fs.existsSync(p)) {
+          const html = fs.readFileSync(p, 'utf8');
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          return res.status(200).send(html);
+        }
+      } catch (e) {}
+    }
+  }
   res.status(404).json({ error: 'Endpoint not found', status: 404 });
 });
 
