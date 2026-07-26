@@ -14,6 +14,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'edusphere_super_secret_jwt_key_202
 const ADMIN_SECRET = process.env.ADMIN_SECRET || 'edusphere_admin_master_secret_2026';
 
 const app  = express();
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 let io;
 try {
