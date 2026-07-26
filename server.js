@@ -938,10 +938,27 @@ app.use('/api/*', (req, res) => {
   res.status(404).json({ error: 'Endpoint not found', status: 404 });
 });
 
-// 2. Static Assets Serving
-app.use(express.static(path.join(__dirname, 'public')));
+// 2. Static Assets Explicit Handlers for Vercel
+app.get('/style.css', (req, res) => {
+  const candidatePaths = [path.join(__dirname, 'public', 'style.css'), path.resolve('public/style.css')];
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) return res.type('text/css').send(fs.readFileSync(p, 'utf8'));
+  }
+  res.status(404).send('');
+});
 
-// 3. Client SPA Fallback with safe multi-path resolution for Vercel
+app.get('/app.js', (req, res) => {
+  const candidatePaths = [path.join(__dirname, 'public', 'app.js'), path.resolve('public/app.js')];
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) return res.type('application/javascript').send(fs.readFileSync(p, 'utf8'));
+  }
+  res.status(404).send('');
+});
+
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.resolve('public')));
+
+// 3. Client SPA Fallback with safe fs.readFileSync for Vercel
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ error: 'Endpoint not found', status: 404 });
@@ -954,7 +971,10 @@ app.get('*', (req, res) => {
   ];
   for (const p of candidatePaths) {
     if (fs.existsSync(p)) {
-      return res.sendFile(p);
+      try {
+        const html = fs.readFileSync(p, 'utf8');
+        return res.type('text/html').send(html);
+      } catch (e) {}
     }
   }
   res.status(200).send('<!DOCTYPE html><html><head><title>EduSphere Platform</title></head><body><h2>EduSphere Platform Serverless</h2></body></html>');
