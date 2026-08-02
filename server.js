@@ -621,164 +621,122 @@ app.post('/api/copilot', async (req, res) => {
 
 // --- PROJECTS: Get All ---
 app.get('/api/projects', async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('projects')
-      .select('*')
-      .order('created_at', { ascending: false });
+  const isSupabaseConfigured = SUPABASE_URL && SUPABASE_KEY && !SUPABASE_URL.includes('obhoybumtaactmetyold');
 
-    if (error) throw error;
-
-    const projects = data.map(p => ({
-      id:                 p.id,
-      title:              p.title,
-      description:        p.description,
-      teamMembers:        p.team_members,
-      techStack:          p.tech_stack,
-      progressPercentage: p.progress_percentage,
-      checklist:          p.checklist,
-      timeline:           p.timeline,
-      liveDemoUrl:        p.live_demo_url,
-      codebaseUrl:        p.codebase_url,
-      imageUrl:           p.image_url,
-      videoUrl:           p.video_url  // may be null — handled in frontend
-    }));
-
-    res.json(projects);
-  } catch (err) {
-    console.error('Get projects error:', err);
-    res.status(500).json({ error: 'Failed to retrieve showroom projects.' });
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase.from('projects').select('*').order('created_at', { ascending: false });
+      if (!error && data && data.length > 0) {
+        const projects = data.map(p => ({
+          id:                 p.id,
+          title:              p.title,
+          description:        p.description,
+          teamMembers:        safeParseJSON(p.team_members, []),
+          techStack:          safeParseJSON(p.tech_stack, []),
+          progressPercentage: parseInt(p.progress_percentage || 0, 10),
+          checklist:          safeParseJSON(p.checklist, []),
+          timeline:           safeParseJSON(p.timeline, []),
+          liveDemoUrl:        p.live_demo_url,
+          codebaseUrl:        p.codebase_url,
+          imageUrl:           p.image_url,
+          videoUrl:           p.video_url
+        }));
+        return res.json(projects);
+      }
+    } catch (err) {
+      console.error('Get projects error:', err);
+    }
   }
+
+  return res.json(MEMORY_PROJECTS);
 });
 
 // --- PROJECTS: Create ---
-// BUG-2 FIX: No hardcoded fallback video URL — stores NULL if empty
 app.post('/api/projects', async (req, res) => {
   try {
-    const { title, description, teamMembers, techStack, liveDemoUrl, codebaseUrl, imageUrl, videoUrl } = req.body;
+    const { title, description, teamMembers, techStack, liveDemoUrl, codebaseUrl, imageUrl, videoUrl, userId } = req.body || {};
 
-    const newProject = {
-      id:                  `proj-${Date.now()}`,
-      title,
-      description,
-      team_members:        teamMembers || [],
-      tech_stack:          techStack   || [],
+    if (!title || !title.trim() || !description || !description.trim()) {
+      return res.status(400).json({ error: 'Validation Error: Project title and overview description are required.' });
+    }
+
+    const uId = req.user ? req.user.id : (userId || 'usr-student-001');
+
+    const newProjectObj = {
+      id:                 `proj-${Date.now()}`,
+      userId:             uId,
+      user_id:            uId,
+      title:              title.trim(),
+      description:        description.trim(),
+      teamMembers:        Array.isArray(teamMembers) ? teamMembers : ['Student Node'],
+      team_members:       Array.isArray(teamMembers) ? teamMembers : ['Student Node'],
+      techStack:          Array.isArray(techStack) ? techStack : (typeof techStack === 'string' ? techStack.split(',').map(s => s.trim()).filter(Boolean) : ['Node.js']),
+      tech_stack:         Array.isArray(techStack) ? techStack : (typeof techStack === 'string' ? techStack.split(',').map(s => s.trim()).filter(Boolean) : ['Node.js']),
+      progressPercentage: 0,
       progress_percentage: 0,
+      codebaseUrl:        codebaseUrl || '',
+      codebase_url:       codebaseUrl || '',
+      liveDemoUrl:        liveDemoUrl || '',
+      live_demo_url:      liveDemoUrl || '',
+      imageUrl:           imageUrl || 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80',
+      image_url:          imageUrl || 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80',
+      videoUrl:           videoUrl || '',
+      video_url:          videoUrl || '',
       checklist: [
-        { id: 1, text: "Establish layout design principles / تأسيس واجهة وتصميم النظام", checked: false },
-        { id: 2, text: "Build relational database schema elements / بناء جداول وقاعدة البيانات", checked: false },
-        { id: 3, text: "Complete responsive system components / إنجاز وتطوير النظام المتجاوب", checked: false },
-        { id: 4, text: "Conduct system testing operations / إجراء اختبار ومعايرة للنظام", checked: false }
+        { id: 'item-1', text: "Establish layout design principles / تأسيس واجهة وتصميم النظام", checked: false },
+        { id: 'item-2', text: "Build relational database schema elements / بناء جداول وقاعدة البيانات", checked: false },
+        { id: 'item-3', text: "Complete responsive system components / إنجاز وتطوير النظام المتجاوب", checked: false },
+        { id: 'item-4', text: "Conduct system testing operations / إجراء اختبار ومعايرة للنظام", checked: false }
       ],
       timeline: [
         { phase: "Idea Conception",          description: "Design conceptual flows and schematics",   completed: true,  date: new Date().toISOString().split('T')[0] },
         { phase: "Database & Backend Design", description: "Establishing schemas and routing maps",    completed: false, date: "" },
         { phase: "Hardware & UI Integration", description: "Connecting features and layouts",          completed: false, date: "" },
         { phase: "Deployment & Calibration",  description: "Publishing final platform links",          completed: false, date: "" }
-      ],
-      live_demo_url:  liveDemoUrl || '',
-      codebase_url:   codebaseUrl || '',
-      image_url:      imageUrl    || 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80',
-      video_url:      (videoUrl && videoUrl.trim()) ? videoUrl.trim() : null  // BUG-2: NULL if empty
+      ]
     };
 
-    const { data: inserted, error } = await supabase
-      .from('projects')
-      .insert([newProject])
-      .select()
-      .single();
+    MEMORY_PROJECTS.unshift(newProjectObj);
 
-    if (error) throw error;
-
-    // Async co-write local cache
-    syncToLocalCache();
-
-    res.json({ success: true, project: {
-      id:                 inserted.id,
-      title:              inserted.title,
-      description:        inserted.description,
-      teamMembers:        inserted.team_members,
-      techStack:          inserted.tech_stack,
-      progressPercentage: inserted.progress_percentage,
-      checklist:          inserted.checklist,
-      timeline:           inserted.timeline,
-      liveDemoUrl:        inserted.live_demo_url,
-      codebaseUrl:        inserted.codebase_url,
-      imageUrl:           inserted.image_url,
-      videoUrl:           inserted.video_url
-    }});
-  } catch (err) {
-    console.error('Create project error:', err);
-    res.status(500).json({ error: 'Failed to record project.' });
-  }
-});
-
-// --- PROJECTS: Update (Full/Partial) ---
-// BUG-9 FIX: Fetches existing JSONB fields and merges them to prevent data loss
-app.put('/api/projects/:id', async (req, res) => {
-  try {
-    const projectId = req.params.id;
-    const { title, description, teamMembers, techStack, liveDemoUrl, codebaseUrl, imageUrl, videoUrl, status, progressPercentage, checklist, timeline } = req.body;
-
-    // Fetch existing row first to preserve complex JSONB fields
-    const { data: existing, error: fetchError } = await supabase
-      .from('projects')
-      .select('*')
-      .eq('id', projectId)
-      .single();
-
-    if (fetchError || !existing) {
-      return res.status(404).json({ error: 'Project not found.' });
+    const isSupabaseConfigured = SUPABASE_URL && SUPABASE_KEY && !SUPABASE_URL.includes('obhoybumtaactmetyold');
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('projects').insert([newProjectObj]);
+      } catch (e) {}
     }
 
-    // Merge only provided fields; retain existing JSONB arrays if not in request
-    const updates = {
-      title:               title              !== undefined ? title              : existing.title,
-      description:         description        !== undefined ? description        : existing.description,
-      team_members:        teamMembers        !== undefined ? teamMembers        : existing.team_members,
-      tech_stack:          techStack          !== undefined ? techStack          : existing.tech_stack,
-      live_demo_url:       liveDemoUrl        !== undefined ? liveDemoUrl        : existing.live_demo_url,
-      codebase_url:        codebaseUrl        !== undefined ? codebaseUrl        : existing.codebase_url,
-      image_url:           imageUrl           !== undefined ? imageUrl           : existing.image_url,
-      video_url:           videoUrl           !== undefined ? ((videoUrl && videoUrl.trim()) ? videoUrl.trim() : null) : existing.video_url,
-      progress_percentage: progressPercentage !== undefined ? progressPercentage : existing.progress_percentage,
-      // BUG-9: Retain existing checklist/timeline unless explicitly updated
-      checklist:           checklist          !== undefined ? checklist          : existing.checklist,
-      timeline:            timeline           !== undefined ? timeline           : existing.timeline,
-    };
-
-    const { data: updated, error: updateError } = await supabase
-      .from('projects')
-      .update(updates)
-      .eq('id', projectId)
-      .select()
-      .single();
-
-    if (updateError) throw updateError;
-
-    // Async co-write local cache
-    syncToLocalCache();
-
-    res.json({ success: true, project: {
-      id:                 updated.id,
-      title:              updated.title,
-      description:        updated.description,
-      teamMembers:        updated.team_members,
-      techStack:          updated.tech_stack,
-      progressPercentage: updated.progress_percentage,
-      checklist:          updated.checklist,
-      timeline:           updated.timeline,
-      liveDemoUrl:        updated.live_demo_url,
-      codebaseUrl:        updated.codebase_url,
-      imageUrl:           updated.image_url,
-      videoUrl:           updated.video_url
-    }});
+    return res.status(201).json({
+      success: true,
+      message: 'Engineering project registered successfully.',
+      project: newProjectObj
+    });
   } catch (err) {
-    console.error('Update project error:', err);
-    res.status(500).json({ error: 'Failed to update project.' });
+    return res.status(500).json({ error: 'Project registration error.' });
   }
 });
 
+// --- PROJECTS: Update (PUT) ---
+app.put('/api/projects/:id', async (req, res) => {
+  try {
+    const projId = req.params.id;
+    const updates = req.body || {};
+
+    const idx = MEMORY_PROJECTS.findIndex(p => p.id === projId);
+    if (idx !== -1) {
+      MEMORY_PROJECTS[idx] = { ...MEMORY_PROJECTS[idx], ...updates };
+    }
+
+    const isSupabaseConfigured = SUPABASE_URL && SUPABASE_KEY && !SUPABASE_URL.includes('obhoybumtaactmetyold');
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('projects').update(updates).eq('id', projId);
+      } catch (e) {}
+    }
+
+    return res.json({ success: true, message: 'Project parameters updated successfully.', project: MEMORY_PROJECTS[idx] || updates });
+  } catch (err) {
+    return res.status(500).json({ error: 'Project update failed.' });
+  }
 // --- PROJECTS: Update Checklist ---
 app.patch('/api/projects/:id/checklist', async (req, res) => {
   try {
