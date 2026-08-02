@@ -203,7 +203,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 
     // 2. Check seeded evaluators
     if (!targetUser) {
-      const seeded = SEEDED_EVALUATORS.find(ev => ev.email === emailLower);
+      const seeded = SEEDED_EVALUATORS.find(ev => ev.email.toLowerCase() === emailLower);
       if (seeded) targetUser = seeded;
     }
 
