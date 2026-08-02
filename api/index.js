@@ -18,6 +18,18 @@ const SUPABASE_URL = process.env.SUPABASE_URL || 'https://obhoybumtaactmetyold.s
 const SUPABASE_KEY = process.env.SUPABASE_KEY || 'sb_publishable_nl5PcpNr5gwPZ5M_nbO_Yw__qoB0r8I';
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+const SEEDED_EVALUATORS = [
+  { id: 'eval-static-001', name: 'Eng. Alaa Abdelrahman',   email: 'alaa@edusphere.edu',    password: 'alaa_eval_2026',    role: 'Evaluator', avatar: 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?auto=format&fit=crop&w=150&q=80' },
+  { id: 'eval-static-002', name: 'Eng. Tariq Ahmed',        email: 'tariq@edusphere.edu',   password: 'tariq_eval_2026',   role: 'Evaluator', avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=150&q=80' },
+  { id: 'eval-static-003', name: 'Eng. Mohamed Gamal',      email: 'mohamed@edusphere.edu', password: 'mohamed_eval_2026', role: 'Evaluator', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&q=80' },
+  { id: 'eval-static-004', name: 'Eng. Ahmed Mustafa',      email: 'ahmed@edusphere.edu',   password: 'ahmed_eval_2026',   role: 'Evaluator', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80' },
+  { id: 'eval-static-005', name: 'Eng. Abdelaziz Mahmoud',  email: 'aziz@edusphere.edu',    password: 'aziz_eval_2026',    role: 'Evaluator', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80' },
+  { id: 'eval-static-006', name: 'Eng. Basant Reda',        email: 'basant@edusphere.edu',  password: 'basant_eval_2026',  role: 'Evaluator', avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80' },
+  { id: 'eval-static-007', name: 'Eng. Yara Hassan',        email: 'yara@edusphere.edu',    password: 'yara_eval_2026',    role: 'Evaluator', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80' }
+];
+
+const MEMORY_USERS = new Map();
+
 // ---- Middleware ----
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -87,52 +99,84 @@ router.get('/health', (req, res) => {
 // --- AUTH: Login ---
 router.post('/auth/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
 
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('*')
-      .ilike('email', email.trim())
-      .single();
+    const emailLower = email.toLowerCase().trim();
+    let targetUser = null;
 
-    if (error || !user) {
-      return res.status(401).json({ error: 'Invalid credentials. Please verify email and password.' });
+    // 1. Check memory registered users first
+    if (MEMORY_USERS.has(emailLower)) {
+      targetUser = MEMORY_USERS.get(emailLower);
     }
 
-    let isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch && user.password === password) isMatch = true;
+    // 2. Check seeded evaluators
+    if (!targetUser) {
+      const seeded = SEEDED_EVALUATORS.find(ev => ev.email === emailLower);
+      if (seeded) targetUser = seeded;
+    }
+
+    // 3. Check Supabase database if configured and not found yet
+    const isSupabaseConfigured = SUPABASE_URL && SUPABASE_KEY && !SUPABASE_URL.includes('obhoybumtaactmetyold');
+    if (!targetUser && isSupabaseConfigured) {
+      try {
+        const { data: dbUser, error: dbErr } = await supabase
+          .from('users')
+          .select('*')
+          .ilike('email', emailLower)
+          .maybeSingle();
+
+        if (!dbErr && dbUser) {
+          targetUser = dbUser;
+        }
+      } catch (dbErr) {
+        console.error('[AUTH_LOGIN_ERROR] Supabase search error:', dbErr);
+      }
+    }
+
+    if (!targetUser) {
+      return res.status(401).json({ error: 'Invalid credentials. User email not found. Please register first.' });
+    }
+
+    // Verify password with bcrypt or plaintext fallback
+    let isMatch = false;
+    if (targetUser.password && (targetUser.password.startsWith('$2a$') || targetUser.password.startsWith('$2b$'))) {
+      isMatch = await bcrypt.compare(password, targetUser.password);
+    } else {
+      isMatch = (targetUser.password === password);
+    }
 
     if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid credentials. Please verify email and password.' });
+      return res.status(401).json({ error: 'Invalid credentials. Password incorrect.' });
     }
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
+      { id: targetUser.id, email: targetUser.email, role: targetUser.role },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    res.json({
+    return res.json({
       success: true,
       token,
       user: {
-        id:        user.id,
-        name:      user.name,
-        email:     user.email,
-        role:      user.role,
-        studentId: user.student_id,
-        major:     user.major,
-        skills:    safeParseJSON(user.skills, []),
-        avatar:    user.avatar,
-        status:    user.status,
-        bio:       user.bio
+        id:        targetUser.id,
+        name:      targetUser.name,
+        email:     targetUser.email,
+        role:      targetUser.role || 'Student',
+        studentId: targetUser.student_id || targetUser.studentId || 'STD-1001',
+        major:     targetUser.major || 'Computer Engineering',
+        skills:    safeParseJSON(targetUser.skills, ['HTML5', 'CSS3', 'JavaScript']),
+        avatar:    targetUser.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+        status:    targetUser.status || 'Available',
+        bio:       targetUser.bio || ''
       }
     });
   } catch (err) {
-    res.status(500).json({ error: 'Authentication issue.' });
+    console.error('[AUTH_LOGIN_ERROR] Exception:', err);
+    return res.status(500).json({ error: 'Authentication issue during login.' });
   }
 });
 
@@ -215,6 +259,9 @@ router.post('/auth/register', async (req, res) => {
       major:      (major && major.trim()) ? major.trim() : 'Computer Engineering',
       skills:     ['HTML5', 'CSS3', 'JavaScript']
     };
+
+    // Save to memory store for resilient instant login lookup
+    MEMORY_USERS.set(emailLower, createdUserObj);
 
     // 5. Database Insertion with Resilient Fallback
     if (isSupabaseConfigured) {

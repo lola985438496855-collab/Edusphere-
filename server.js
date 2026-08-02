@@ -49,6 +49,7 @@ const SEEDED_EVALUATORS = [
 ];
 
 let isEvaluatorsSeeded = false;
+const MEMORY_USERS = new Map();
 
 // Seed evaluator accounts with bcrypt hashed passwords (Issue 1)
 async function initializeSeededEvaluators() {
@@ -187,57 +188,84 @@ app.post('/api/clear-db', clearDbLimiter, authenticateJWT, async (req, res) => {
 // --- AUTH: Login (Issue 1 & 3) ---
 app.post('/api/auth/login', authLimiter, async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
 
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('*')
-      .ilike('email', email.trim())
-      .single();
+    const emailLower = email.toLowerCase().trim();
+    let targetUser = null;
 
-    if (error || !user) {
-      return res.status(401).json({ error: 'Invalid credentials. Please verify your email and password.' });
+    // 1. Check memory registered users first
+    if (MEMORY_USERS.has(emailLower)) {
+      targetUser = MEMORY_USERS.get(emailLower);
     }
 
-    // Verify hashed password with fallback for unhashed seed passwords
-    let isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch && user.password === password) {
-      isMatch = true;
+    // 2. Check seeded evaluators
+    if (!targetUser) {
+      const seeded = SEEDED_EVALUATORS.find(ev => ev.email === emailLower);
+      if (seeded) targetUser = seeded;
+    }
+
+    // 3. Check Supabase database if configured and not found yet
+    const isSupabaseConfigured = SUPABASE_URL && SUPABASE_KEY && !SUPABASE_URL.includes('obhoybumtaactmetyold');
+    if (!targetUser && isSupabaseConfigured) {
+      try {
+        const { data: dbUser, error: dbErr } = await supabase
+          .from('users')
+          .select('*')
+          .ilike('email', emailLower)
+          .maybeSingle();
+
+        if (!dbErr && dbUser) {
+          targetUser = dbUser;
+        }
+      } catch (dbErr) {
+        console.error('[AUTH_LOGIN_ERROR] Supabase search error:', dbErr);
+      }
+    }
+
+    if (!targetUser) {
+      return res.status(401).json({ error: 'Invalid credentials. User email not found. Please register first.' });
+    }
+
+    // Verify password with bcrypt or plaintext fallback
+    let isMatch = false;
+    if (targetUser.password && (targetUser.password.startsWith('$2a$') || targetUser.password.startsWith('$2b$'))) {
+      isMatch = await bcrypt.compare(password, targetUser.password);
+    } else {
+      isMatch = (targetUser.password === password);
     }
 
     if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid credentials. Please verify your email and password.' });
+      return res.status(401).json({ error: 'Invalid credentials. Password incorrect.' });
     }
 
-    // Issue signed JWT Token
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
+      { id: targetUser.id, email: targetUser.email, role: targetUser.role },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    res.json({
+    return res.json({
       success: true,
       token,
       user: {
-        id:        user.id,
-        name:      user.name,
-        email:     user.email,
-        role:      user.role,
-        studentId: user.student_id,
-        major:     user.major,
-        skills:    safeParseJSON(user.skills, []),
-        avatar:    user.avatar,
-        status:    user.status,
-        bio:       user.bio
+        id:        targetUser.id,
+        name:      targetUser.name,
+        email:     targetUser.email,
+        role:      targetUser.role || 'Student',
+        studentId: targetUser.student_id || targetUser.studentId || 'STD-1001',
+        major:     targetUser.major || 'Computer Engineering',
+        skills:    safeParseJSON(targetUser.skills, ['HTML5', 'CSS3', 'JavaScript']),
+        avatar:    targetUser.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+        status:    targetUser.status || 'Available',
+        bio:       targetUser.bio || ''
       }
     });
   } catch (err) {
-    console.error('Login error:', err);
-    res.status(500).json({ error: 'Server authentication issue.' });
+    console.error('[AUTH_LOGIN_ERROR] Exception:', err);
+    return res.status(500).json({ error: 'Authentication issue during login.' });
   }
 });
 
@@ -324,6 +352,9 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
       major:      (major && major.trim()) ? major.trim() : 'Computer Engineering',
       skills:     ['HTML5', 'CSS3', 'JavaScript']
     };
+
+    // Save to memory store for resilient instant login lookup
+    MEMORY_USERS.set(emailLower, createdUserObj);
 
     // 5. Database Insertion with Resilient Fallback
     if (isSupabaseConfigured) {
