@@ -403,6 +403,10 @@ function setupAuthForm() {
 
         if (response.ok && result.success) {
           state.currentUser = result.user;
+          if (result.token) {
+            state.token = result.token;
+            localStorage.setItem('edusphere_token', result.token);
+          }
           handleSuccessfulLogin();
         } else {
           showToast(result.error || 'Authentication aborted.', 'error');
@@ -424,6 +428,10 @@ function setupAuthForm() {
 
         if (response.ok && result.success) {
           state.currentUser = result.user;
+          if (result.token) {
+            state.token = result.token;
+            localStorage.setItem('edusphere_token', result.token);
+          }
           showToast(
             state.currentLang === 'en' 
               ? 'Dynamic Registration Successful. Welcome node!' 
@@ -444,40 +452,54 @@ function setupAuthForm() {
   });
 
   function handleSuccessfulLogin() {
-    // SECTION 1 FIX: Persist session to LocalStorage immediately
-    localStorage.setItem('edusphere_session', JSON.stringify(state.currentUser));
+    // Persist session and token to LocalStorage immediately
+    if (state.currentUser) {
+      localStorage.setItem('edusphere_session', JSON.stringify(state.currentUser));
+    }
+    if (state.token) {
+      localStorage.setItem('edusphere_token', state.token);
+    }
 
     showToast(
       state.currentLang === 'en' 
-        ? `Authentication successful. Welcome node: ${state.currentUser.name}`
-        : `تم تأكيد الهوية بنجاح. مرحبًا بك في المنظومة: ${state.currentUser.name}`, 
+        ? `Authentication successful. Welcome node: ${state.currentUser ? state.currentUser.name : ''}`
+        : `تم تأكيد الهوية بنجاح. مرحبًا بك في المنظومة: ${state.currentUser ? state.currentUser.name : ''}`, 
       'success'
     );
     showRandomMemeToast();
 
-    document.getElementById('header-avatar').src = state.currentUser.avatar;
-    document.getElementById('header-username').textContent = state.currentUser.name;
-    document.getElementById('header-userrole').textContent = state.currentUser.role;
+    if (state.currentUser) {
+      document.getElementById('header-avatar').src = state.currentUser.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80';
+      document.getElementById('header-username').textContent = state.currentUser.name || 'User';
+      document.getElementById('header-userrole').textContent = state.currentUser.role || 'Student';
+    }
 
     const nav = document.querySelector('.nav-links');
-    nav.style.opacity = '1';
-    nav.style.pointerEvents = 'auto';
+    if (nav) {
+      nav.style.opacity = '1';
+      nav.style.pointerEvents = 'auto';
+    }
 
     // Clear auth form fields safely
-    document.getElementById('auth-name').value = '';
-    document.getElementById('auth-email').value = '';
-    document.getElementById('auth-password').value = '';
-    document.getElementById('auth-student-id').value = '';
+    const nameEl = document.getElementById('auth-name');
+    const emailEl = document.getElementById('auth-email');
+    const passEl = document.getElementById('auth-password');
+    const stdIdEl = document.getElementById('auth-student-id');
 
-    // SECTION 1 FIX: Normalize role case before routing
-    const role = (state.currentUser.role || '').toLowerCase();
+    if (nameEl) nameEl.value = '';
+    if (emailEl) emailEl.value = '';
+    if (passEl) passEl.value = '';
+    if (stdIdEl) stdIdEl.value = '';
+
+    // Normalize role case before routing
+    const role = (state.currentUser ? state.currentUser.role : '').toLowerCase();
     if (role === 'evaluator' || role === 'engineer' || role === 'admin') {
       switchView('evaluator');
     } else {
       switchView('dashboard');
     }
 
-    // BUG-1: Start alliance notification polling
+    // Start alliance notification polling
     startAlliancePolling();
   }
 
@@ -485,6 +507,9 @@ function setupAuthForm() {
   document.getElementById('logout-btn').addEventListener('click', (e) => {
     e.preventDefault();
     state.currentUser = null;
+    state.token = null;
+    localStorage.removeItem('edusphere_session');
+    localStorage.removeItem('edusphere_token');
     state.authMode = 'login';
     state.wantsEvaluator = false;
 
@@ -514,9 +539,26 @@ function setupAuthForm() {
   });
 }
 
-// SECTION 1 FIX: Restore session from LocalStorage on page reload
+function getAuthHeaders() {
+  const headers = { 'Content-Type': 'application/json' };
+  const token = state.token || localStorage.getItem('edusphere_token');
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  if (state.currentUser) {
+    headers['x-user-id'] = state.currentUser.id;
+    headers['x-user-role'] = state.currentUser.role;
+  }
+  return headers;
+}
+
+// RESTORE SESSION FROM LOCAL STORAGE ON PAGE LOAD
 function restoreSessionFromStorage() {
   try {
+    const savedToken = localStorage.getItem('edusphere_token');
+    if (savedToken) {
+      state.token = savedToken;
+    }
     const saved = localStorage.getItem('edusphere_session');
     if (!saved) return;
     const user = JSON.parse(saved);
@@ -524,13 +566,15 @@ function restoreSessionFromStorage() {
 
     state.currentUser = user;
 
-    document.getElementById('header-avatar').src = user.avatar || '';
+    document.getElementById('header-avatar').src = user.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80';
     document.getElementById('header-username').textContent = user.name;
     document.getElementById('header-userrole').textContent = user.role;
 
     const nav = document.querySelector('.nav-links');
-    nav.style.opacity = '1';
-    nav.style.pointerEvents = 'auto';
+    if (nav) {
+      nav.style.opacity = '1';
+      nav.style.pointerEvents = 'auto';
+    }
 
     // Route to correct view based on normalized role
     const role = (user.role || '').toLowerCase();
@@ -543,6 +587,7 @@ function restoreSessionFromStorage() {
     startAlliancePolling();
   } catch (e) {
     localStorage.removeItem('edusphere_session');
+    localStorage.removeItem('edusphere_token');
   }
 }
 
@@ -634,7 +679,7 @@ function setupProjectRegistrationForm() {
     try {
       const response = await fetch('/api/projects', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(payload)
       });
 
@@ -647,7 +692,11 @@ function setupProjectRegistrationForm() {
           'success'
         );
         showRandomMemeToast();
-        
+
+        if (result.project) {
+          state.projects.unshift(result.project);
+        }
+
         document.getElementById('reg-project-title').value = '';
         document.getElementById('reg-project-desc').value = '';
         document.getElementById('reg-project-tech').value = '';
