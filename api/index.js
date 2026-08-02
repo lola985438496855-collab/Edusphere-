@@ -379,6 +379,9 @@ const MOCK_STUDENTS = [
 
 // --- MATCHMAKING: Get Students ---
 router.get(['/matchmaking/students', '/users/students'], async (req, res) => {
+  if (!SUPABASE_URL || SUPABASE_URL.includes('obhoybumtaactmetyold')) {
+    return res.json(MOCK_STUDENTS);
+  }
   try {
     const { data: users, error } = await supabase.from('users').select('*').eq('role', 'Student');
     if (error || !users || users.length === 0) {
