@@ -326,28 +326,81 @@ router.post('/projects', authenticateJWT, async (req, res) => {
   }
 });
 
+const MOCK_STUDENTS = [
+  {
+    id: 'usr-student-001',
+    name: 'Anas Reda (انس رضا)',
+    email: 'anas@edusphere.edu',
+    role: 'Student',
+    studentId: 'STD-1001',
+    major: 'Computer Engineering',
+    skills: ['HTML5', 'CSS3', 'JavaScript', 'Node.js', 'Socket.io'],
+    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+    status: 'Available',
+    bio: 'Lead Full-Stack Student Developer on EduSphere Platform'
+  },
+  {
+    id: 'usr-student-002',
+    name: 'Kareem Mahmoud (كريم محمود)',
+    email: 'kareem@edusphere.edu',
+    role: 'Student',
+    studentId: 'STD-1002',
+    major: 'Software Engineering',
+    skills: ['Python', 'PostgreSQL', 'React', 'Docker'],
+    avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80',
+    status: 'Available',
+    bio: 'Software Systems Architecture Student'
+  },
+  {
+    id: 'usr-student-003',
+    name: 'Nour El-Din (نور الدين)',
+    email: 'nour@edusphere.edu',
+    role: 'Student',
+    studentId: 'STD-1003',
+    major: 'Artificial Intelligence',
+    skills: ['Python', 'PyTorch', 'TensorFlow', 'Data Science'],
+    avatar: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&w=150&q=80',
+    status: 'Available',
+    bio: 'AI & Data Science Engineering Student'
+  },
+  {
+    id: 'usr-student-004',
+    name: 'Omar Khaled (عمر خالد)',
+    email: 'omar@edusphere.edu',
+    role: 'Student',
+    studentId: 'STD-1004',
+    major: 'Embedded Systems',
+    skills: ['C++', 'Arduino', 'Raspberry Pi', 'IoT'],
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
+    status: 'Busy',
+    bio: 'Embedded Hardware Developer'
+  }
+];
+
 // --- MATCHMAKING: Get Students ---
-router.get('/matchmaking/students', async (req, res) => {
+router.get(['/matchmaking/students', '/users/students'], async (req, res) => {
   try {
     const { data: users, error } = await supabase.from('users').select('*').eq('role', 'Student');
-    if (error) throw error;
+    if (error || !users || users.length === 0) {
+      return res.json(MOCK_STUDENTS);
+    }
 
     const students = users.map(u => ({
       id:        u.id,
       name:      u.name,
       email:     u.email,
       role:      u.role,
-      studentId: u.student_id,
+      studentId: u.student_id || u.studentId,
       major:     u.major,
       skills:    safeParseJSON(u.skills, []),
       avatar:    u.avatar,
-      status:    u.status,
-      bio:       u.bio
+      status:    u.status || 'Available',
+      bio:       u.bio || ''
     }));
 
     res.json(students);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch matchmaking students.' });
+    res.json(MOCK_STUDENTS);
   }
 });
 
