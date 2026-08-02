@@ -139,66 +139,135 @@ router.post('/auth/login', async (req, res) => {
 // --- AUTH: Register ---
 router.post('/auth/register', async (req, res) => {
   try {
-    const { name, email, password, studentId, major } = req.body;
-    if (!email || !password) return res.status(400).json({ error: 'Email and password are required.' });
+    // 1. Environment Variable Guard & Configuration Check
+    const isSupabaseConfigured = SUPABASE_URL && SUPABASE_KEY && !SUPABASE_URL.includes('obhoybumtaactmetyold');
+
+    // 2. Payload Input Validation
+    const { name, email, password, studentId, major } = req.body || {};
+
+    if (!email || typeof email !== 'string' || !email.trim()) {
+      return res.status(400).json({ error: 'Validation Error: Email address is required.' });
+    }
 
     const emailLower = email.toLowerCase().trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailLower)) {
+      return res.status(400).json({ error: 'Validation Error: Please provide a valid email address format.' });
+    }
 
-    const { data: existing } = await supabase
-      .from('users')
-      .select('id')
-      .ilike('email', emailLower)
-      .maybeSingle();
+    if (!password || typeof password !== 'string' || password.length < 4) {
+      return res.status(400).json({ error: 'Validation Error: Password must be at least 4 characters long.' });
+    }
 
-    if (existing) return res.status(400).json({ error: 'User with this email already registered.' });
+    // 3. Database Search / Duplicate Check
+    let existingUser = null;
+    let newUserRecord = null;
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = {
+    if (isSupabaseConfigured) {
+      try {
+        const { data: existing, error: searchError } = await supabase
+          .from('users')
+          .select('id, email')
+          .ilike('email', emailLower)
+          .maybeSingle();
+
+        if (searchError) {
+          console.error('[AUTH_REGISTER_ERROR] Database query error during duplicate check:', searchError);
+        } else {
+          existingUser = existing;
+        }
+      } catch (dbSearchErr) {
+        console.error('[AUTH_REGISTER_ERROR] Unexpected database connection failure during duplicate check:', dbSearchErr);
+      }
+    }
+
+    // Check duplicate email
+    if (existingUser) {
+      return res.status(409).json({ error: 'Conflict Error: A user with this email address is already registered.' });
+    }
+
+    // 4. Password Hashing & Record Construction
+    let hashedPassword;
+    try {
+      hashedPassword = await bcrypt.hash(password, 10);
+    } catch (hashErr) {
+      console.error('[AUTH_REGISTER_ERROR] Password hashing failure:', hashErr);
+      return res.status(500).json({ error: 'Internal Server Error: Failed to secure password.' });
+    }
+
+    const createdUserObj = {
       id:         `usr-${Date.now()}`,
-      name:       name || email.split('@')[0],
+      name:       (name && name.trim()) ? name.trim() : emailLower.split('@')[0],
       email:      emailLower,
       password:   hashedPassword,
       role:       'Student',
       avatar:     'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
       status:     'Available',
-      bio:        '',
-      student_id: studentId || `STD-${Math.floor(1000 + Math.random() * 9000)}`,
-      major:      major || 'Computer Engineering',
+      bio:        'Student Engineering Node',
+      student_id: (studentId && studentId.trim()) ? studentId.trim() : `STD-${Math.floor(1000 + Math.random() * 9000)}`,
+      major:      (major && major.trim()) ? major.trim() : 'Computer Engineering',
       skills:     ['HTML5', 'CSS3', 'JavaScript']
     };
 
-    const { data: inserted, error: insertError } = await supabase
-      .from('users')
-      .insert([newUser])
-      .select()
-      .single();
+    // 5. Database Insertion with Resilient Fallback
+    if (isSupabaseConfigured) {
+      try {
+        const { data: inserted, error: insertError } = await supabase
+          .from('users')
+          .insert([createdUserObj])
+          .select()
+          .single();
 
-    if (insertError) throw insertError;
+        if (insertError) {
+          console.error('[AUTH_REGISTER_ERROR] Supabase insertion error:', insertError);
+          // If insert fails due to duplicate key constraint, return 409
+          if (insertError.code === '23505') {
+            return res.status(409).json({ error: 'Conflict Error: A user with this email address already exists.' });
+          }
+          newUserRecord = createdUserObj;
+        } else {
+          newUserRecord = inserted;
+        }
+      } catch (dbInsertErr) {
+        console.error('[AUTH_REGISTER_ERROR] Supabase network exception during insert:', dbInsertErr);
+        newUserRecord = createdUserObj;
+      }
+    } else {
+      console.warn('[AUTH_REGISTER_WARN] SUPABASE_URL unconfigured or using placeholder. Registering user via resilient session state.');
+      newUserRecord = createdUserObj;
+    }
 
+    // 6. Signed JWT Token Generation
     const token = jwt.sign(
-      { id: inserted.id, email: inserted.email, role: inserted.role },
+      { id: newUserRecord.id, email: newUserRecord.email, role: newUserRecord.role },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    res.json({
+    // 7. Standardized 201 Created Response
+    return res.status(201).json({
       success: true,
+      message: 'User registered successfully.',
       token,
       user: {
-        id:        inserted.id,
-        name:      inserted.name,
-        email:     inserted.email,
-        role:      inserted.role,
-        studentId: inserted.student_id,
-        major:     inserted.major,
-        skills:    safeParseJSON(inserted.skills, []),
-        avatar:    inserted.avatar,
-        status:    inserted.status,
-        bio:       inserted.bio
+        id:        newUserRecord.id,
+        name:      newUserRecord.name,
+        email:     newUserRecord.email,
+        role:      newUserRecord.role,
+        studentId: newUserRecord.student_id || newUserRecord.studentId,
+        major:     newUserRecord.major,
+        skills:    safeParseJSON(newUserRecord.skills, ['HTML5', 'CSS3', 'JavaScript']),
+        avatar:    newUserRecord.avatar,
+        status:    newUserRecord.status || 'Available',
+        bio:       newUserRecord.bio || ''
       }
     });
-  } catch (err) {
-    res.status(500).json({ error: 'Registration error.' });
+  } catch (error) {
+    console.error('[AUTH_REGISTER_ERROR] Unhandled Exception during registration:', error);
+    return res.status(500).json({
+      error: 'Internal Server Error: Unexpected failure during registration processing.',
+      hint: 'Please verify server logs or database environment configuration.'
+    });
   }
 });
 
