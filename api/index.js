@@ -10,6 +10,16 @@ const jwt       = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET || 'edusphere_super_secret_jwt_key_2026';
 const ADMIN_SECRET = process.env.ADMIN_SECRET || 'edusphere_admin_master_secret_2026';
 
+function safeParseJSON(input, fallback = []) {
+  if (!input) return fallback;
+  if (typeof input === 'object') return input;
+  try {
+    return JSON.parse(input);
+  } catch (e) {
+    return fallback;
+  }
+}
+
 const app = express();
 app.set('trust proxy', 1);
 
