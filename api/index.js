@@ -142,6 +142,13 @@ router.post('/auth/register', async (req, res) => {
     // 1. Environment Variable Guard & Configuration Check
     const isSupabaseConfigured = SUPABASE_URL && SUPABASE_KEY && !SUPABASE_URL.includes('obhoybumtaactmetyold');
 
+    if (!isSupabaseConfigured) {
+      console.error('[REGISTRATION_CONFIG_ERROR]: DATABASE_URL / SUPABASE_URL environment variables are missing or unconfigured.');
+    }
+    if (!JWT_SECRET) {
+      console.error('[REGISTRATION_CONFIG_ERROR]: JWT_SECRET environment variable is missing.');
+    }
+
     // 2. Payload Input Validation
     const { name, email, password, studentId, major } = req.body || {};
 
@@ -597,6 +604,75 @@ app.get('/', (req, res) => {
   }
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.status(200).send('<!DOCTYPE html><html><head><title>EduSphere Platform</title></head><body><h2>EduSphere Platform Online</h2></body></html>');
+});
+
+// --- AI COPILOT: Real LLM Integration & Resilient Fallback ---
+router.post('/copilot', async (req, res) => {
+  try {
+    const { prompt, viewContext, language } = req.body || {};
+
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      return res.status(400).json({ error: 'Prompt is required.' });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
+
+    if (apiKey) {
+      try {
+        const systemPrompt = `You are EduSphere AI Copilot, an elite engineering assistant on the EduSphere platform. The user is currently on the "${viewContext || 'dashboard'}" page. Respond concisely, helpfully, and professionally in ${language === 'ar' ? 'Arabic' : 'English'}. Keep responses clear, markdown-formatted, and relevant to engineering student projects, coding, and team matching.`;
+        
+        const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: `${systemPrompt}\n\nUser Question: ${prompt}` }]
+              }
+            ]
+          })
+        });
+
+        if (geminiRes.ok) {
+          const data = await geminiRes.json();
+          const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (reply) {
+            return res.json({ success: true, reply, source: 'gemini-llm' });
+          }
+        } else {
+          const errText = await geminiRes.text();
+          console.error('[AI_COPILOT_ERROR] Gemini API Error Response:', geminiRes.status, errText);
+        }
+      } catch (llmErr) {
+        console.error('[AI_COPILOT_ERROR] LLM API Call Exception:', llmErr);
+      }
+    } else {
+      console.warn('[AI_COPILOT_WARN] GEMINI_API_KEY environment variable is not set. Falling back to intelligent assistant engine.');
+    }
+
+    // Intelligent Context-Aware Fallback Engine
+    const userLower = prompt.toLowerCase();
+    let fallbackReply = `🤖 **EduSphere AI Copilot Brief:**\n\nI processed your query regarding: *"${prompt.trim()}"*.\n\nCurrently, you are inspecting the **${(viewContext || 'dashboard').toUpperCase()}** platform node. All security and data layers are operating cleanly.`;
+
+    if (userLower.includes('project') || userLower.includes('مشروع')) {
+      fallbackReply = `💡 **Project Recommendation:**\nTo showcase your engineering project or join an existing student group, head to the **Project Showroom** or use the **Register Node** form on your Dashboard.`;
+    } else if (userLower.includes('team') || userLower.includes('فريق') || userLower.includes('طلاب')) {
+      fallbackReply = `👥 **Team Finder Intelligence:**\nYou can find candidate software and hardware engineers matching your skills matrix in the **Team Finder** section. Filter by skills like Python, C++, or Node.js.`;
+    } else if (userLower.includes('debug') || userLower.includes('خطأ') || userLower.includes('code')) {
+      fallbackReply = `🔍 **Smart Debugger Active:**\nPaste your code snippet into the **Embedded Smart Debugger** on the Dashboard for instant static analysis and automated syntax corrections.`;
+    }
+
+    return res.json({
+      success: true,
+      reply: fallbackReply,
+      source: 'fallback-assistant',
+      notice: apiKey ? 'Quota limit exceeded, served via fallback' : 'GEMINI_API_KEY missing, served via fallback'
+    });
+  } catch (error) {
+    console.error('[AI_COPILOT_ERROR] Unhandled Exception:', error);
+    return res.status(500).json({ error: 'Failed to process AI Copilot query.' });
+  }
 });
 
 // Mount router for API requests

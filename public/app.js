@@ -2516,31 +2516,67 @@ function handleCopilotChipAction(cmd) {
   }
 }
 
-function processCopilotNaturalLanguage(userText) {
+async function processCopilotNaturalLanguage(userText) {
   const lower = userText.toLowerCase();
 
-  // Navigation intents
-  if (lower.includes('showroom') || lower.includes('معرض') || lower.includes('مشروع')) {
+  // Instant Navigation intents
+  if (lower.includes('showroom') || lower.includes('معرض')) {
     switchView('showroom');
     appendCopilotMsg('🚀 Switched view to <b>Project Showroom</b>.', 'assistant');
-  } else if (lower.includes('team') || lower.includes('بحث') || lower.includes('فريق')) {
+    return;
+  } else if (lower.includes('team') || lower.includes('بحث')) {
     switchView('teamfinder');
     appendCopilotMsg('👥 Switched view to <b>Team Finder</b>.', 'assistant');
-  } else if (lower.includes('evaluator') || lower.includes('hub') || lower.includes('تقييم')) {
+    return;
+  } else if (lower.includes('evaluator') || lower.includes('hub')) {
     switchView('evaluator');
     appendCopilotMsg('📊 Switched view to <b>Hub Manager / Evaluator Console</b>.', 'assistant');
+    return;
   } else if (lower.includes('dashboard') || lower.includes('لوحة')) {
     switchView('dashboard');
     appendCopilotMsg('🏠 Switched view to <b>Dashboard</b>.', 'assistant');
-  } else if (lower.includes('theme') || lower.includes('مظهر') || lower.includes('الوان')) {
+    return;
+  } else if (lower.includes('theme') || lower.includes('مظهر')) {
     toggleCyberTheme();
     appendCopilotMsg('🎨 Cyber Theme dynamically updated.', 'assistant');
-  } else if (lower.includes('fix') || lower.includes('debug') || lower.includes('خطأ')) {
-    switchView('dashboard');
-    document.getElementById('view-dashboard').scrollIntoView({ behavior: 'smooth' });
-    appendCopilotMsg('🔍 Scanned active view. Check the <b>Embedded Smart Debugger</b> module below.', 'assistant');
-  } else {
-    appendCopilotMsg(`🤖 I processed your query: "<i>${escapeHTML(userText)}</i>". Context inspected on view <b>${state.activeView}</b>. All systems operational.`, 'assistant');
+    return;
+  }
+
+  // Show thinking indicator
+  const loadingId = 'copilot-thinking-' + Date.now();
+  appendCopilotMsg(`<span id="${loadingId}">⏳ <i>AI Copilot is analyzing prompt with LLM...</i></span>`, 'assistant');
+
+  try {
+    const response = await fetch('/api/copilot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: userText,
+        viewContext: state.activeView,
+        language: state.currentLang
+      })
+    });
+
+    const data = await response.json();
+    const thinkingEl = document.getElementById(loadingId);
+    
+    if (response.ok && data.reply) {
+      const formattedReply = data.reply.replace(/\n/g, '<br>');
+      if (thinkingEl) {
+        thinkingEl.parentElement.innerHTML = formattedReply;
+      } else {
+        appendCopilotMsg(formattedReply, 'assistant');
+      }
+    } else {
+      if (thinkingEl) {
+        thinkingEl.parentElement.innerHTML = '🤖 ' + (data.error || 'Unable to process query at this time.');
+      }
+    }
+  } catch (err) {
+    const thinkingEl = document.getElementById(loadingId);
+    if (thinkingEl) {
+      thinkingEl.parentElement.innerHTML = '🤖 Connection issue connecting to AI Copilot API.';
+    }
   }
 }
 
