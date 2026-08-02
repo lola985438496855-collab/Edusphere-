@@ -551,12 +551,13 @@ app.put('/api/users/update', async (req, res) => {
 });
 
 // --- AI COPILOT: Real LLM Integration & Resilient Fallback ---
-app.post('/api/copilot', async (req, res) => {
+app.post(['/api/copilot', '/api/ai/copilot'], async (req, res) => {
   try {
-    const { prompt, viewContext, language } = req.body || {};
+    const { prompt, message, query, viewContext, language } = req.body || {};
+    const userPrompt = prompt || message || query || '';
 
-    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
-      return res.status(400).json({ error: 'Prompt is required.' });
+    if (!userPrompt || typeof userPrompt !== 'string' || !userPrompt.trim()) {
+      return res.status(400).json({ error: 'Prompt/Message is required.' });
     }
 
     const apiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
@@ -572,7 +573,7 @@ app.post('/api/copilot', async (req, res) => {
             contents: [
               {
                 role: 'user',
-                parts: [{ text: `${systemPrompt}\n\nUser Question: ${prompt}` }]
+                parts: [{ text: `${systemPrompt}\n\nUser Question: ${userPrompt}` }]
               }
             ]
           })
@@ -596,8 +597,8 @@ app.post('/api/copilot', async (req, res) => {
     }
 
     // Intelligent Context-Aware Fallback Engine
-    const userLower = prompt.toLowerCase();
-    let fallbackReply = `🤖 **EduSphere AI Copilot Brief:**\n\nI processed your query regarding: *"${prompt.trim()}"*.\n\nCurrently, you are inspecting the **${(viewContext || 'dashboard').toUpperCase()}** platform node. All security and data layers are operating cleanly.`;
+    const userLower = userPrompt.toLowerCase();
+    let fallbackReply = `🤖 **EduSphere AI Copilot Brief:**\n\nI processed your query regarding: *"${userPrompt.trim()}"*.\n\nCurrently, you are inspecting the **${(viewContext || 'dashboard').toUpperCase()}** platform node. All security and data layers are operating cleanly.`;
 
     if (userLower.includes('project') || userLower.includes('مشروع')) {
       fallbackReply = `💡 **Project Recommendation:**\nTo showcase your engineering project or join an existing student group, head to the **Project Showroom** or use the **Register Node** form on your Dashboard.`;
